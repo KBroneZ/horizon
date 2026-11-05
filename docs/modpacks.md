@@ -339,7 +339,8 @@ packs of Skyblock Plus are). A content mod may not hold `data/minecraft`, so the
 what they are for, such as a void world's noise settings. For a 26.2 or 26.3 pack, `port` makes
 them data packs instead: upgraded to 26.3 (`docs/datapack-upgrade.md`; a 26.3 one is copied as
 it is) into `<work>/home/new-world-datapacks/<mod>/`, with what happened in `<work>/datapacks.json`.
-A content mod an earlier port carried from the same jar is removed.
+A content mod an earlier port carried from the same jar is removed, and so is a pack in that folder
+whose jar is no longer a data-only one of the pack: `port` owns the folder.
 
 `home/` is the profile's game folder. The game copies its `new-world-datapacks/` into each world it
 creates there: Create New World shows them selected in its Data Packs screen, and a world made

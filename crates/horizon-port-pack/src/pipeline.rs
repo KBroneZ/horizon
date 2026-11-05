@@ -137,12 +137,14 @@ pub fn carry(
     let allowed = |b: &str| vanilla.as_ref().is_none_or(|v| v.contains(b));
     let conventions = crate::worldgen::loader_biome_tags(work);
     let minecraft = minecraft(work);
+    // A data-only jar is a data pack (`datapacks`), never also a content mod.
     let chosen = |r: &inventory::Record| {
-        if only.is_empty() {
-            r.class == "content" && !datapacks::is_data_only(r, &minecraft)
-        } else {
-            only.contains(&r.key)
-        }
+        !datapacks::is_data_only(r, &minecraft)
+            && if only.is_empty() {
+                r.class == "content"
+            } else {
+                only.contains(&r.key)
+            }
     };
     // The mods ported along (carried now or before), for the conditions of
     // the mods' worldgen modifiers.

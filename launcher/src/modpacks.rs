@@ -552,6 +552,7 @@ mod tests {
         ));
         let _ = fs::remove_dir_all(&root);
         let work = root.join("ports/sky");
+        fs::create_dir_all(&work).unwrap();
         pipeline::write_json(&work.join("pack.json"), &Pack::default()).unwrap();
         assert!(!load(&work).unwrap().can_play());
         let pack = datapacks::folder(&work).join("void");

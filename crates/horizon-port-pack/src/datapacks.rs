@@ -62,16 +62,58 @@ pub fn is_data_only(r: &Record, minecraft: &str) -> bool {
         })
 }
 
+/// A record key is a folder name here, and it comes from the jar's own metadata: one plain name
+/// only, never a path.
+fn plain_name(key: &str) -> bool {
+    !key.is_empty()
+        && key != "."
+        && key != ".."
+        && key
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+}
+
+/// The content mod an older build carried from the same jar, which would load beside the pack.
+fn drop_carry(work: &Path, key: &str) -> Result<(), String> {
+    let carried = work.join("mods").join(key);
+    if carried.exists() {
+        fs::remove_dir_all(&carried).map_err(|e| format!("{}: {e}", carried.display()))?;
+    }
+    Ok(())
+}
+
+/// Drops the packs of jars that are no longer data-only in this pack (gone from it, or read again
+/// with classes), so new worlds stop getting them.
+fn prune(work: &Path, keys: &[&str]) -> Result<(), String> {
+    for e in fs::read_dir(folder(work)).into_iter().flatten().flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        if !keys.contains(&name.as_str()) {
+            let path = e.path();
+            fs::remove_dir_all(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        }
+    }
+    Ok(())
+}
+
 /// One jar into `out`. A pack installed before is replaced: worlds keep their own copies.
 fn install_one(jar: &Path, out: &Path, upgrade_it: bool) -> Result<Vec<String>, String> {
     if out.exists() {
         fs::remove_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     }
-    if !upgrade_it {
-        upgrade::copy_into(jar, out)?;
-        return Ok(Vec::new());
-    }
-    let report = upgrade::upgrade_into(jar, out)?;
+    let written = if upgrade_it {
+        upgrade::upgrade_into(jar, out).map(Some)
+    } else {
+        upgrade::copy_into(jar, out).map(|()| None)
+    };
+    // Half a pack must not reach new worlds.
+    let report = match written {
+        Ok(Some(report)) => report,
+        Ok(None) => return Ok(Vec::new()),
+        Err(e) => {
+            let _ = fs::remove_dir_all(out);
+            return Err(e);
+        }
+    };
     let lossy = report
         .lossy
         .iter()
@@ -90,6 +132,12 @@ pub fn install(
     log: Log,
 ) -> Result<usize, String> {
     let mut report = BTreeMap::new();
+    let keys: Vec<&str> = records
+        .iter()
+        .filter(|r| is_data_only(r, minecraft))
+        .map(|r| r.key.as_str())
+        .collect();
+    prune(work, &keys)?;
     for r in records.iter().filter(|r| is_data_only(r, minecraft)) {
         let (Some(jar), Some(info)) = (&r.jar, &r.info) else {
             continue;
@@ -98,15 +146,14 @@ pub fn install(
             assets: info.census.textures + info.census.languages > 0,
             ..Installed::default()
         };
-        let carried = work.join("mods").join(&r.key);
-        if carried.exists() {
-            fs::remove_dir_all(&carried).map_err(|e| format!("{}: {e}", carried.display()))?;
-        }
-        match install_one(
-            jar,
-            &folder(work).join(&r.key),
-            upgrades(minecraft) == Some(true),
-        ) {
+        let upgrade_it = upgrades(minecraft) == Some(true);
+        let result = if plain_name(&r.key) {
+            drop_carry(work, &r.key)
+                .and_then(|()| install_one(jar, &folder(work).join(&r.key), upgrade_it))
+        } else {
+            Err(format!("{:?} is not a plain folder name", r.key))
+        };
+        match result {
             Ok(notes) => {
                 log(format!(
                     "{}: data pack for new worlds ({} notes)",
@@ -235,6 +282,10 @@ mod tests {
         assert!(load(&work)["void"].assets);
         // Run again: the same result, not "already exists".
         assert_eq!(install(&work, &records, "26.2", &|_| {}), Ok(1));
+        // A jar no longer in the pack stops coming into new worlds.
+        assert_eq!(install(&work, &[], "26.2", &|_| {}), Ok(0));
+        assert!(!pack.exists());
+        assert_eq!(installed(&work), 0);
         fs::remove_dir_all(&root).unwrap();
     }
 
@@ -264,8 +315,14 @@ mod tests {
         let good = record("good", jar(&root, "good", &files));
         let mut bad = record("bad", jar(&root, "bad", &files));
         bad.jar = Some(root.join("gone.jar"));
-        assert_eq!(install(&work, &[bad, good], "26.2", &|_| {}), Ok(1));
+        // A mod id that is a path must not reach outside the work folder.
+        let outside = root.join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        let escape = record("../../outside", jar(&root, "escape", &files));
+        assert_eq!(install(&work, &[bad, good, escape], "26.2", &|_| {}), Ok(1));
+        assert!(outside.is_dir());
         let report = load(&work);
+        assert!(!report["../../outside"].error.is_empty());
         assert!(!report["bad"].error.is_empty());
         assert!(report["good"].error.is_empty());
         assert_eq!(installed(&work), 1);
