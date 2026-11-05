@@ -4,6 +4,7 @@
 //! the inventory, each mod's `carry-report.json` and its harness result
 //! (`tools/mod_port_harness.py`).
 use crate::{
+    datapacks::{self, Installed},
     inventory::Record,
     resourcepacks::{Outcome, Report, State},
 };
@@ -288,6 +289,26 @@ fn carried(work: &Path, key: &str) -> Option<(Status, String)> {
     }
 }
 
+/// A data-only jar: on in new worlds, partial because nobody compared it with the Java pack.
+fn data_pack(installed: &Installed) -> (Status, String) {
+    if !installed.error.is_empty() {
+        return (
+            Status::NotYet,
+            format!("data pack not installed: {}", installed.error),
+        );
+    }
+    let mut reason =
+        "data pack: on in new worlds of this profile, not in older ones; not compared with the Java pack"
+            .to_owned();
+    if installed.assets {
+        reason.push_str("; its assets (names, textures) are not loaded");
+    }
+    if !installed.notes.is_empty() {
+        let _ = write!(reason, "; {}", installed.notes.join("; "));
+    }
+    (Status::Partial, reason)
+}
+
 fn resource_row(path: &str, outcome: Option<&Outcome>, record: Option<&Record>) -> Row {
     let state = outcome.map_or(State::Missing, |o| o.state);
     let shader = path.starts_with("shaderpacks/");
@@ -326,6 +347,7 @@ fn resource_row(path: &str, outcome: Option<&Outcome>, record: Option<&Record>) 
 
 pub fn build(records: &[Record], work: &Path) -> Vec<Row> {
     let resourcepacks = Report::load(work);
+    let packs = datapacks::load(work);
     let mut rows: Vec<Row> = records
         .iter()
         .map(|r| {
@@ -338,6 +360,8 @@ pub fn build(records: &[Record], work: &Path) -> Vec<Row> {
                 (Status::NotYet, why.to_owned())
             } else if r.tier == "none" || matches!(r.class.as_str(), "library" | "performance") {
                 (Status::NotNeeded, not_needed(&r.class).to_owned())
+            } else if let Some(installed) = packs.get(&r.key) {
+                data_pack(installed)
             } else if let Some(c) = carried(work, &r.key) {
                 c
             } else {
