@@ -713,10 +713,24 @@ mod item_resource_property_tests {
         fs::create_dir(&root).unwrap();
         for entry in fs::read_dir(&resources).unwrap() {
             let entry = entry.unwrap();
-            if entry.file_name() != "items.json" {
+            let name = entry.file_name();
+            if name != "items.json" && name != "command-registries.json" {
                 link_fixture_source(&entry.path(), &root.join(entry.file_name()));
             }
         }
+        // A content item joins the item registry as well as the defaults, as mod content does.
+        let mut registries: Value =
+            serde_json::from_slice(&fs::read(resources.join("command-registries.json")).unwrap())
+                .unwrap();
+        registries["items"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!("horizon:consumable_fixture"));
+        fs::write(
+            root.join("command-registries.json"),
+            serde_json::to_vec(&registries).unwrap(),
+        )
+        .unwrap();
         let mut defaults: Value =
             serde_json::from_slice(&fs::read(resources.join("items.json")).unwrap()).unwrap();
         defaults["minecraft:iron_sword"]["minecraft:damage"] = json!(75);
