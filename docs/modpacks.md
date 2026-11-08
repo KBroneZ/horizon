@@ -489,7 +489,9 @@ Per jar, without decompiling:
   many block entities, menus, screens, entities, renderers, recipe serializers, payload types.
 - **Known mods:** a reviewed table in the repo (id → class, tier, Horizon equivalent: "sodium:
   performance, built in", "jei: client-ui, recipe viewer built in") wins over heuristics. It
-  starts with ATM10's 495 rows.
+  starts with ATM10's 495 rows ([atm10-mods.csv](modpacks/atm10-mods.csv)), and
+  [client-mods.csv](modpacks/client-mods.csv) adds the client mods of other packs that Horizon replaces
+  (a client-ui mod with tier `none` is reported as not needed).
 
 Class rules, in order: the known-mods table; client-only side → client-ui; server-only side →
 server-only; mixins only, into rendering or ticking, no content → performance; no content and
@@ -1188,6 +1190,46 @@ Every world loaded and stayed up, with no panic and no error in the log. Before 
 Adventure lost three of YUNG's mods at start ("both use the namespace yungsapi"); after it all 20 load. As a share of
 the mods that need porting (not counting performance mods and libraries), 2 of 81 ported partly, 20 of 66 and 42 of
 375. Every ported mod is Partial: their Java code (block entities, entities, Mixins) doesn't come along.
+
+### Fabulously Optimized on Horizon
+
+[Fabulously Optimized](https://modrinth.com/modpack/fabulously-optimized) (FO) is the biggest pack on Modrinth and
+is almost all client-side: performance mods, client quality of life, and resource-pack format readers. Checked with
+v15.0.0-beta.3 (Fabric 0.20.1, Minecraft 26.3; 49 indexed files: 47 mods and 2 resource packs, plus one resource
+pack in the overrides), imported and ported with `horizon-launcher modpack import` and `modpack port`, then played
+offscreen with `horizon-ctl` on scratch homes.
+
+**It plays.** The world loads with no error in the log, at vanilla's look: FO ships no content, so there is nothing
+for Horizon to carry over, and no mod of the pack changes how the game plays. What FO's mods do is covered by
+Horizon's own engine or is not there yet:
+
+| Coverage (50 files) | Count | What |
+|---|---:|---|
+| Not needed | 39 | the 16 performance mods and 9 libraries (Horizon's engine and mod API replace them); Mod Menu (Options > Mods), Reese's Sodium Options (Video Settings), Zoomify (the Zoom mod), Controlify (controller support, [controllers.md](controllers.md)), LambDynamicLights (dynamic lights, [extras.md](extras.md)), e4mc ([Play with friends](play-with-friends.md)); Continuity, Entity Texture Features and Entity Model Features, whose pack formats the engine reads ([resource-packs.md](resource-packs.md), its "partly" rows list what is missing); crash and config tooling (Crash Assistant, MixinTrace Reborn, Config Manager), Iris and Sodium Shadowy Path Blocks |
+| Partial | 3 | the three resource packs, staged and not rendering-checked |
+| Not yet | 8 | client features below |
+
+**Resource packs.** All three are translation-only: `Chat Reporting Helper` and `Mod Menu Helper` (`assets/fo/lang`)
+and `SodiumTranslations` (`assets/sodium/lang`) translate the screens of mods Horizon does not run, so enabling
+them changes nothing the player sees. Import stages them, as for every pack, and leaves the enabled list as it
+was. FO's index has no shader pack (players pick one in Iris), and its `config/` overrides are mod settings that Horizon does
+not read.
+
+**Not yet** (the player notices when a pack or habit uses it; all eight are client interfaces, tier client):
+
+| Mod | What a player misses |
+|---|---|
+| Animatica | OptiFine's animated-texture files (`optifine/anim`): a pack that uses them shows still textures. `.mcmeta` animations work |
+| Better Mount HUD | the mount's health and hunger on the HUD; the vanilla jump bar stays |
+| Cape Provider | capes from other providers (Horizon draws no capes, [cosmetics.md](cosmetics.md)) |
+| More Chat History | chat keeps vanilla's 100 lines |
+| OptiGUI | OptiFine custom GUI textures (`optifine/gui`) are not applied |
+| Polytone | custom biome and block colours, colormaps beyond vanilla's, block sounds and dye colours from a pack |
+| Renice Shot | high-resolution screenshots |
+| Skyboxify | OptiFine custom skies |
+
+These are client-API gaps, not ports: each is a feature the game can grow, not a mod to translate. No mod of the pack
+needs the mod API.
 
 ## Open questions for Ludovic
 
