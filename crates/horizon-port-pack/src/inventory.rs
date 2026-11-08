@@ -53,7 +53,7 @@ fn jar_of(pack_jar: Option<&PathBuf>, file_name: &str, work: &Path) -> Option<Pa
 }
 
 pub fn build(pack: &Pack, cache: &Cache, work: &Path) -> Vec<Record> {
-    let known = Known::atm10();
+    let known = Known::reviewed();
     let mut records = Vec::new();
     // Modrinth project id -> record key, for dependencies.
     let mut by_project: HashMap<String, String> = HashMap::new();

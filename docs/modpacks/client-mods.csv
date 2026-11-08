@@ -1,0 +1,13 @@
+mod_id,name,version,class,tier,confidence,source,license,client,server
+modmenu,Mod Menu,21.0.0,client-ui,none,reviewed,modrinth,MIT,required,unsupported
+reeses-sodium-options,Reese's Sodium Options,2.2.5+mc26.3,client-ui,none,reviewed,modrinth,MIT,required,unsupported
+zoomify,Zoomify (Zoom),2.17.0+mc26.3,client-ui,none,reviewed,modrinth,LGPL-3.0-only,required,unsupported
+controlify,Controlify (Controller support),3.5.3+mc26.3,client-ui,none,reviewed,modrinth,LGPL-3.0-or-later,required,optional
+lambdynamiclights,LambDynamicLights - Dynamic Lights,4.13.0+26.3,client-ui,none,reviewed,modrinth,LicenseRef-Lambda-License,required,unsupported
+e4mc,e4mc,6.2.3,client-ui,none,reviewed,modrinth,MIT,required,required
+mixintrace-reborn,MixinTrace Reborn,1.0,other,none,reviewed,modrinth,MIT,optional,optional
+configmanager,Config Manager,1.1.3,other,none,reviewed,modrinth,LGPL-3.0-only,unsupported,required
+continuity,Continuity,3.0.1+26.3,client-ui,none,reviewed,modrinth,LGPL-3.0-only,required,unsupported
+entity_texture_features,[ETF] Entity Texture Features,7.2.6-fabric-26.3,client-ui,none,reviewed,modrinth,LGPL-3.0-only,required,unsupported
+entity-model-features,[EMF] Entity Model Features,3.3.12,client-ui,none,reviewed,modrinth,LGPL-3.0-only,required,unsupported
+sodium-shadowy-path-blocks,Sodium Shadowy Path Blocks (SSPB),8.0.0,other,none,reviewed,modrinth,LGPL-3.0-only,required,unsupported

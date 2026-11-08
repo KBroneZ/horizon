@@ -654,6 +654,24 @@ mod tests {
     }
 
     #[test]
+    fn a_client_mod_horizon_replaces_is_not_needed_but_other_client_mods_are_not_yet() {
+        let work =
+            std::env::temp_dir().join(format!("horizon-report-client-{}", std::process::id()));
+        let rows = build(
+            &[
+                record("modmenu", "client-ui", "none", &[]),
+                record("capes", "client-ui", "client", &[]),
+            ],
+            &work,
+        );
+        let by: BTreeMap<&str, &Row> = rows.iter().map(|r| (r.key.as_str(), r)).collect();
+        assert_eq!(by["modmenu"].status, Status::NotNeeded);
+        assert_eq!(by["modmenu"].reason, "built into Horizon");
+        assert_eq!(by["capes"].status, Status::NotYet);
+        assert!(by["capes"].reason.contains("client interfaces"));
+    }
+
+    #[test]
     fn carried_harness_needs_executed_checks() {
         for harness in [
             serde_json::json!({"passed": false, "checks": {}}),

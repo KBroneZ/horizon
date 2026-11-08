@@ -2,9 +2,13 @@
 //! and order them by required dependencies.
 use std::collections::{BTreeMap, HashMap};
 
-/// The reviewed table: ATM10's 495 rows (`docs/modpacks/atm10-mods.csv`).
-/// It wins over the heuristics.
-const KNOWN_CSV: &str = include_str!("../../../docs/modpacks/atm10-mods.csv");
+/// The reviewed tables: ATM10's 495 rows (`docs/modpacks/atm10-mods.csv`) and the client mods
+/// Horizon replaces or does not need (`docs/modpacks/client-mods.csv`), in that order: the
+/// first row for a mod wins. They win over the heuristics.
+const KNOWN_CSVS: [&str; 2] = [
+    include_str!("../../../docs/modpacks/atm10-mods.csv"),
+    include_str!("../../../docs/modpacks/client-mods.csv"),
+];
 
 pub struct Known {
     by_key: HashMap<String, (String, String)>,
@@ -39,15 +43,15 @@ fn csv_fields(line: &str) -> Vec<String> {
 }
 
 impl Known {
-    pub fn atm10() -> Self {
+    pub fn reviewed() -> Self {
         let mut by_key = HashMap::new();
-        for line in KNOWN_CSV.lines().skip(1) {
+        for line in KNOWN_CSVS.iter().flat_map(|csv| csv.lines().skip(1)) {
             let f = csv_fields(line);
             if f.len() < 6 || f[5] == "guess" {
                 continue;
             }
             let value = (f[3].clone(), f[4].clone());
-            by_key.insert(normalise(&f[0]), value.clone());
+            by_key.entry(normalise(&f[0])).or_insert(value.clone());
             by_key.entry(normalise(&f[1])).or_insert(value);
         }
         Known { by_key }
@@ -175,7 +179,7 @@ mod tests {
 
     #[test]
     fn known_table_matches_ids_and_names() {
-        let k = Known::atm10();
+        let k = Known::reviewed();
         assert_eq!(k.get(&["create"]).map(|v| v.0.as_str()), Some("content"));
         assert_eq!(
             k.get(&["", "Get It Together, Drops!"])
@@ -184,6 +188,35 @@ mod tests {
         );
         assert_eq!(k.get(&["sodium"]).map(|v| v.1.as_str()), Some("none"));
         assert!(k.get(&["not-a-mod"]).is_none());
+    }
+
+    #[test]
+    fn client_mods_horizon_replaces_are_not_ported() {
+        let k = Known::reviewed();
+        // By id, by Modrinth slug and by display name, as the inventory asks.
+        for keys in [
+            &["modmenu"][..],
+            &["reeses_sodium_options"],
+            &["", "reeses-sodium-options"],
+            &["", "", "Zoomify (Zoom)"],
+        ] {
+            let (class, tier) = k.get(keys).unwrap_or_else(|| panic!("{keys:?}"));
+            assert_eq!((class.as_str(), tier.as_str()), ("client-ui", "none"));
+        }
+        assert_eq!(
+            k.get(&["mixintrace-reborn"]).map(|v| v.1.as_str()),
+            Some("none")
+        );
+        // Their pack formats are read by the engine itself (docs/resource-packs.md).
+        for id in [
+            "continuity",
+            "entity_texture_features",
+            "entity-model-features",
+        ] {
+            assert_eq!(k.get(&[id]).map(|v| v.1.as_str()), Some("none"), "{id}");
+        }
+        // The ATM10 table is read first and keeps its rows.
+        assert_eq!(k.get(&["jei"]).map(|v| v.1.as_str()), Some("client"));
     }
 
     #[test]
