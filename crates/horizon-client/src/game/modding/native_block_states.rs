@@ -4,12 +4,12 @@ use super::Game;
 use horizon_client::command::{Reader, args::Registries, block};
 use horizon_client::items::ItemStack;
 use horizon_world::chunk::BlockState;
-use horizon_world::fluid::FluidKind;
+use horizon_world::fluid::{FluidKind, FluidState as EngineFluidState};
 use horizon_world::registry::{BlockRegistry, BlockStateId};
 use mod_api::{
     BlockEntityTypeKey, BlockKey, BlockSoundType, BlockStateRange, EffectKey, FluidDefinition,
-    FluidKey, FluidStateError, FluidTypeProperties, ItemKey, StateConstraint, StateMatchError,
-    StateProperty,
+    FluidFacts, FluidKey, FluidState, FluidStateError, FluidTypeProperties, ItemKey, ParticleType,
+    StateConstraint, StateMatchError, StateProperty,
 };
 use std::sync::{Arc, Mutex};
 
@@ -65,6 +65,39 @@ impl Game<'_> {
             can_hydrate: water,
             supports_boating: water,
         })
+    }
+
+    /// A registered fluid's own facts (`Fluid`'s getters), by its world kind; a tank-only fluid
+    /// answers as the empty fluid. None for a key the registry doesn't hold.
+    pub(super) fn fluid_facts(&self, fluid: FluidKey) -> Option<FluidFacts> {
+        let kind = FluidKind::from_name(mod_api::__private::fluid_id(fluid)?)
+            .unwrap_or(FluidKind::Empty);
+        let drip_particle = if kind.same_family(FluidKind::Water) {
+            Some(ParticleType::DrippingWater)
+        } else if kind.same_family(FluidKind::Lava) {
+            Some(ParticleType::DrippingLava)
+        } else {
+            None
+        };
+        Some(FluidFacts {
+            explosion_resistance: kind.explosion_resistance(),
+            randomly_ticks: kind.randomly_ticks(),
+            drip_particle,
+        })
+    }
+
+    /// The liquid block holding `state` (`FluidState.createLegacyBlock`, `Behaviours::legacy_block`).
+    /// None for a tank-only fluid and for an amount, source or falling flag its fluid can't
+    /// have: a source is full, a flowing form holds 1 to 8 and the empty fluid nothing.
+    pub(super) fn fluid_state_legacy_block(&self, state: FluidState) -> Option<BlockStateId> {
+        let kind = super::native_world_read::key_fluid_kind(state.fluid)?;
+        let engine = EngineFluidState::new(kind, state.amount, state.falling);
+        let valid = match kind {
+            FluidKind::Empty => state.amount == 0 && !state.falling && !state.source,
+            _ if engine.is_source() => state.amount == 8 && state.source,
+            _ => (1..=8).contains(&state.amount) && !state.source,
+        };
+        valid.then(|| self.res.behaviours().legacy_block(engine))
     }
 
     /// Validate fluid constraints against the exported property definition.

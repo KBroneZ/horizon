@@ -438,6 +438,31 @@ pub trait LevelsBackend {
     /// `block_state`; an unloaded block above counts as no fluid there.
     #[access(WorldOnly)]
     fn level_fluid_shape(&self, level: LevelRef, pos: [i32; 3]) -> Option<Vec<[f64; 6]>>;
+    /// Side: both.
+    /// How high the fluid at `pos` stands (`FluidState.getHeight`), 0 to 1 of the block: 0 for
+    /// no fluid, a full block under the same fluid, else its own height (`amount / 9`). None as
+    /// for `fluid_shape`; an unloaded block above counts as no fluid there.
+    #[access(WorldOnly)]
+    fn level_fluid_height(&self, level: LevelRef, pos: [i32; 3]) -> Option<f32>;
+    /// Side: both.
+    /// Where the camera sees the fluid's surface at `pos` (`FluidState.getHeightForCamera`): a
+    /// full block for a source under a block whose bottom face is sturdy, else `fluid_height`.
+    /// None as for `fluid_height`.
+    #[access(WorldOnly)]
+    fn level_fluid_height_for_camera(&self, level: LevelRef, pos: [i32; 3]) -> Option<f32>;
+    /// Side: both.
+    /// Whether `fluid` flowing in from `direction` may replace the fluid at `pos`
+    /// (`FluidState.canBeReplacedWith`): water gives way only to a fluid that isn't water, from above, lava
+    /// only to water once it stands at least 4/9 high, a mod's fluid never, no fluid always.
+    /// None as for `fluid_height`, and for a fluid with no world state (a tank-only fluid).
+    #[access(WorldOnly)]
+    fn level_fluid_can_be_replaced_with(
+        &self,
+        level: LevelRef,
+        pos: [i32; 3],
+        fluid: FluidKey,
+        direction: Direction,
+    ) -> Option<bool>;
     /// Side: server.
     /// Every entity the segment from `from` to `to` passes through, nearest first: the test
     /// `ProjectileUtil.getEntityHitResult` makes on each candidate, each entity's box grown by
@@ -571,6 +596,27 @@ pub trait LevelsBackendMut {
     /// tick, with the same random draws and level events. False as for `block_tick`.
     #[access(WorldOnly)]
     fn level_block_random_tick(&mut self, level: LevelRef, pos: [i32; 3]) -> bool;
+    /// Side: server.
+    /// Run the fluid at `pos`'s tick now (`FluidState.tick`): the path a due fluid tick from the
+    /// queue takes, so a flowing fluid settles to its new level and the fluid spreads, with the
+    /// same block updates, `fluid_level_change` asks and follow-up ticks. The queue is not read
+    /// or changed; a `LevelWriteHost`'s `schedule_fluid_tick` queues one. Nothing happens where
+    /// there is no fluid. False as for `block_tick`.
+    #[access(WorldOnly)]
+    fn level_fluid_tick(&mut self, level: LevelRef, pos: [i32; 3]) -> bool;
+    /// Side: server.
+    /// How many ticks `fluid` waits between flow steps at `pos` (`Fluid.getTickDelay`): water 5,
+    /// lava 10 in a dimension where lava is fast (the Nether) and 30 elsewhere, the empty fluid
+    /// 0, a mod's fluid what its `fluid_rules` listeners answer there, as a flow step asks
+    /// them. It changes nothing, but it runs those listeners, so it takes the level in place on
+    /// a `ServerHost`. None as for `block_tick`, and for a fluid with no world state.
+    #[access(WorldOnly)]
+    fn level_fluid_tick_delay(
+        &mut self,
+        level: LevelRef,
+        pos: [i32; 3],
+        fluid: FluidKey,
+    ) -> Option<i32>;
     /// Side: server.
     /// `ServerLevel.findLightningTargetAround`: the closest lightning rod near the column at
     /// `pos`'s `x` and `z`, else a living entity under open sky within 3 blocks of it, picked

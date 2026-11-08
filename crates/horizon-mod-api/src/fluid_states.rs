@@ -1,5 +1,8 @@
 //! Read-only fluid-state definitions from the owning host's loaded registry.
-use crate::{Backend, BackendRef, FluidKey, FluidState, Host, StateConstraint, StateProperty};
+use crate::{
+    Backend, BackendRef, BlockStateId, FluidKey, FluidState, Host, ParticleType, StateConstraint,
+    StateProperty,
+};
 
 /// A registered fluid's world-state definition, or an identity used only in tanks.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -43,6 +46,23 @@ pub struct FluidTypeProperties {
     pub can_hydrate: bool,
     /// `FluidType.supportsBoating`: whether a boat floats on it.
     pub supports_boating: bool,
+}
+
+/// What a registered fluid is in vanilla's `Fluid` itself, apart from any level: the facts its
+/// `FluidType` doesn't hold ([`FluidTypeProperties`]). Flowing forms answer as their source.
+/// The empty fluid and a tank-only fluid resist nothing, never tick randomly and drip nothing.
+#[derive(Clone, Copy, Debug, PartialEq)]
+// exhaustive: the game builds it with a literal; mods only read it
+pub struct FluidFacts {
+    /// `Fluid.getExplosionResistance`: what the fluid adds to its block's blast resistance, 100
+    /// for every world fluid.
+    pub explosion_resistance: f32,
+    /// `Fluid.isRandomlyTicking`: whether a random tick reaches the fluid itself (lava's sets
+    /// fire around it).
+    pub randomly_ticks: bool,
+    /// `Fluid.getDripParticle`: the particle that drips from a block under it, none for a
+    /// mod's fluid.
+    pub drip_particle: Option<ParticleType>,
 }
 
 /// Why fluid-state constraints could not be validated.
@@ -93,6 +113,16 @@ impl FluidStates<'_> {
     pub fn type_properties(&self, fluid: FluidKey) -> Option<FluidTypeProperties> {
         self.backend?.fluid_type_properties(fluid)
     }
+    /// The fluid's own facts, or none without a resolved registry or for a key it doesn't hold.
+    pub fn facts(&self, fluid: FluidKey) -> Option<FluidFacts> {
+        self.backend?.fluid_facts(fluid)
+    }
+    /// The block state that holds `state` in the world (`FluidState.createLegacyBlock`): a
+    /// liquid block at the state's level, air for the empty fluid. None without a resolved
+    /// registry, for a tank-only fluid and for a state its fluid can't take.
+    pub fn legacy_block(&self, state: FluidState) -> Option<BlockStateId> {
+        self.backend?.fluid_state_legacy_block(state)
+    }
     /// Validate partial constraints in input order, without matching a particular state.
     /// Tank-only or unavailable definitions return `NoWorldState`; use `definition`
     /// to distinguish them. Indices identify the first offending constraint.
@@ -118,6 +148,7 @@ mod tests {
         let key = FluidKey(0);
         assert_eq!(Unavailable.fluid_states().definition(key), None);
         assert_eq!(Unavailable.fluid_states().type_properties(key), None);
+        assert_eq!(Unavailable.fluid_states().facts(key), None);
         assert_eq!(
             Unavailable.fluid_states().validate(key, &[]),
             Err(FluidStateError::NoWorldState)

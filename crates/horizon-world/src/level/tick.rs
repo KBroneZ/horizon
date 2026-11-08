@@ -291,8 +291,7 @@ impl<L: LevelAccess + ?Sized> Sim<'_, L> {
         }
         // Only lava's fluid state ticks randomly. A lava block is ticked twice
         // (LiquidBlock.randomTick, then FluidState.randomTick), as in vanilla.
-        let fluid = self.b.fluid(state).kind();
-        if matches!(fluid, FluidKind::Lava | FluidKind::FlowingLava) {
+        if self.b.fluid(state).kind().randomly_ticks() {
             self.lava_random_tick(pos);
         }
     }
@@ -1946,11 +1945,7 @@ impl Behaviours {
     /// [`Self::tick_chunk_random_masked`]'s masks hold. `random_tick_at`
     /// ticks a randomly ticking block, then lava's fluid.
     pub fn random_tick_candidate(&self, state: BlockStateId) -> bool {
-        self.is_randomly_ticking(state)
-            || matches!(
-                self.fluid(state).kind(),
-                FluidKind::Lava | FluidKind::FlowingLava
-            )
+        self.is_randomly_ticking(state) || self.fluid(state).kind().randomly_ticks()
     }
     /// Random-tick a single position (block then fluid), as `tickChunk` does.
     pub fn random_tick<L: LevelAccess + ?Sized>(
@@ -2002,6 +1997,18 @@ impl Behaviours {
         pos: BlockPos,
     ) {
         self.sim(level, ticks).fluid_tick(pos);
+    }
+    /// `Fluid.getTickDelay(level)` for `fluid` at `pos`: water 5, lava 10 where lava is fast
+    /// (the Nether) and 30 elsewhere, a mod's fluid what the level's `mod_fluid_rules` say, as
+    /// a flow step asks it.
+    pub fn fluid_tick_delay<L: LevelAccess + ?Sized>(
+        &self,
+        level: &mut L,
+        ticks: &mut Ticks,
+        fluid: FluidKind,
+        pos: BlockPos,
+    ) -> i32 {
+        self.sim(level, ticks).fluid_tick_delay(fluid, pos)
     }
 }
 

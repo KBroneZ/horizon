@@ -43,6 +43,13 @@ swum in, drown, extinguish, hydrate and carry boats. Flowing forms answer as the
 tank-only fluids emit no light, do nothing to an entity and have a fall modifier of 1. Anything that depends on
 a level, such as lava's current or source conversion, isn't in the record.
 
+`facts(key)` returns the `Fluid`'s own `FluidFacts`, or `None` as for `type_properties`: its
+`explosion_resistance` (100 for every world fluid), whether it `randomly_ticks` (lava only) and its
+`drip_particle` (dripping water or lava, none for a mod's fluid). The empty fluid and tank-only fluids resist
+nothing, never tick randomly and drip nothing. `legacy_block(state)` is `FluidState.createLegacyBlock`: the
+liquid block at the state's level, air for the empty fluid, `None` for a tank-only fluid or a state its fluid
+can't have. The heights, replacement and tick delay depend on the level and are `LevelRef` methods.
+
 `FluidState::matches(constraints)` is a pure local check of carried vanilla fields. Unknown properties
 or noncanonical serialized values return false. A falling source remains a source; a flowing state
 of level 8 remains flowing. Empty constraints match any state. Validate separately for indexed errors.

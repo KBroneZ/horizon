@@ -255,6 +255,39 @@ impl FluidKind {
             _ => false,
         }
     }
+    /// `Fluid.getExplosionResistance`: 100 for every world fluid, 0 for the empty fluid. An
+    /// explosion counts it as the fluid's share of the block's resistance.
+    pub const fn explosion_resistance(self) -> f32 {
+        match self {
+            Self::Empty => 0.0,
+            _ => 100.0,
+        }
+    }
+    /// `Fluid.isRandomlyTicking`: only lava, whose random tick sets fire around it.
+    pub const fn randomly_ticks(self) -> bool {
+        matches!(self, Self::Lava | Self::FlowingLava)
+    }
+    /// `Fluid.canBeReplacedWith(state, level, pos, other, direction)`: whether `other`
+    /// flowing in from `direction` may replace this fluid. Water gives way only to a non-water
+    /// fluid from above, lava only to water once it stands at least 4/9 high, a mod's fluid
+    /// never (NeoForge's `BaseFlowingFluid`), and the empty fluid always. `height` is
+    /// `FluidState.getHeight` at the position, asked for lava only.
+    pub fn can_be_replaced_with(
+        self,
+        other: Self,
+        direction: horizon_core::geometry::Direction,
+        height: impl FnOnce() -> f32,
+    ) -> bool {
+        let water = |kind: Self| kind.same_family(Self::Water);
+        match self {
+            Self::Empty => true,
+            Self::Water | Self::FlowingWater => {
+                direction == horizon_core::geometry::Direction::Down && !water(other)
+            }
+            Self::Mod(_) | Self::ModFlowing(_) => false,
+            Self::Lava | Self::FlowingLava => height() >= 0.444_444_45 && water(other),
+        }
+    }
     /// Its bit in a vanilla fluid tag's mask; a mod's fluid is in none of them.
     pub const fn mask(self) -> u8 {
         match self.vanilla_index() {
@@ -574,6 +607,50 @@ impl From<(FluidKind, u8, bool)> for FluidState {
 }
 
 #[cfg(test)]
+mod height_tests {
+    use super::*;
+
+    /// One column: the fluid above the measured block and whether that block's bottom is sturdy.
+    struct Above(FluidState, bool);
+    impl FluidHeightWorld for Above {
+        type Error = std::convert::Infallible;
+        fn fluid(&mut self, _: [i32; 3]) -> Result<FluidState, Self::Error> {
+            Ok(self.0)
+        }
+        fn sturdy_down(&mut self, _: [i32; 3]) -> Result<bool, Self::Error> {
+            Ok(self.1)
+        }
+    }
+
+    #[test]
+    fn height_is_full_under_the_same_fluid_and_its_own_height_otherwise() {
+        let source = FluidState::WATER;
+        let shallow = FluidState::new(FluidKind::FlowingWater, 3, false);
+        let lava = FluidState::new(FluidKind::Lava, 8, false);
+        let height = |fluid: FluidState, above| {
+            let Ok(height) = fluid.height_at(&mut Above(above, false), [0, 64, 0]);
+            height
+        };
+        assert_eq!(height(FluidState::EMPTY, source), 0.0);
+        // FlowingFluid.getOwnHeight: amount / 9, so a source is 8/9 high under air.
+        assert_eq!(height(source, FluidState::EMPTY), 8.0 / 9.0);
+        assert_eq!(height(shallow, FluidState::EMPTY), 3.0 / 9.0);
+        // Flowing water under a source is the same fluid: a full block.
+        assert_eq!(height(shallow, source), 1.0);
+        assert_eq!(height(source, lava), 8.0 / 9.0);
+        assert_eq!(height(source, source), 1.0);
+        // getHeightForCamera: a source under a sturdy bottom face fills its block; flowing
+        // water doesn't.
+        let camera = |fluid: FluidState| {
+            let Ok(height) = fluid.camera_height_at(&mut Above(FluidState::EMPTY, true), [0; 3]);
+            height
+        };
+        assert_eq!(camera(source), 1.0);
+        assert_eq!(camera(shallow), 3.0 / 9.0);
+    }
+}
+
+#[cfg(test)]
 mod mod_fluid_tests {
     use super::*;
 
@@ -734,5 +811,24 @@ mod mod_fluid_tests {
             postcard::from_bytes::<FluidKind>(&bytes).unwrap(),
             FluidKind::Mod(first)
         );
+    }
+
+    #[test]
+    fn replacement_follows_each_fluid_family_and_reads_height_for_lava_only() {
+        use horizon_core::geometry::Direction::{Down, North, Up};
+        let (water, lava) = (FluidKind::Water, FluidKind::FlowingLava);
+        let fluid = FluidKind::Mod(oil("test:replaced", "test:flowing_replaced"));
+        let unread = || panic!("only lava reads its height");
+        // WaterFluid: only a non-water fluid from above.
+        assert!(water.can_be_replaced_with(lava, Down, unread));
+        assert!(!water.can_be_replaced_with(FluidKind::FlowingWater, Down, unread));
+        assert!(!FluidKind::FlowingWater.can_be_replaced_with(lava, North, unread));
+        // LavaFluid: only water, once the lava stands 0.44444445 high or more.
+        assert!(lava.can_be_replaced_with(water, Up, || 4.0 / 9.0));
+        assert!(!lava.can_be_replaced_with(water, Up, || 3.0 / 9.0));
+        assert!(!FluidKind::Lava.can_be_replaced_with(fluid, Down, || 1.0));
+        // EmptyFluid always; a mod's fluid never.
+        assert!(FluidKind::Empty.can_be_replaced_with(lava, North, unread));
+        assert!(!fluid.can_be_replaced_with(water, Down, unread));
     }
 }

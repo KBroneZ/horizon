@@ -1,14 +1,15 @@
 //! Read-only block, tag and fluid queries for native mods.
 use super::{Dim, Game};
 use horizon_client::{items::Items, world::World};
+use horizon_core::geometry::Direction;
 use horizon_world::{
     chunk::BlockState,
-    fluid::{FluidKind, FluidState as EngineFluidState},
+    fluid::{FluidHeightWorld, FluidKind, FluidState as EngineFluidState},
     level::Behaviours,
     registry::{BlockRegistry, BlockStateId},
 };
 use mod_api::BlockKey;
-use mod_api::{FluidState, LevelRef, NativeLifecycleContext, UnresolvedFluid};
+use mod_api::{FluidKey, FluidState, LevelRef, NativeLifecycleContext, UnresolvedFluid};
 
 /// Why a server block cannot be read.
 #[allow(dead_code)]
@@ -94,23 +95,43 @@ pub(super) fn fluid_in_tag(items: &Items, fluid: &str, tag: &str) -> bool {
     )
 }
 
-/// `FluidState.getShape`'s one box for `fluid` with `above` over it: up to a full block under
-/// the same fluid (`FluidState.getHeight`), else to the fluid's own height. None for no fluid.
-fn fluid_shape(fluid: EngineFluidState, above: Option<EngineFluidState>) -> Option<[f64; 6]> {
-    if fluid.kind() == FluidKind::Empty {
-        return None;
-    }
-    let height = if above.is_some_and(|above| above.kind().same_family(fluid.kind())) {
-        1.0
-    } else {
-        f64::from(fluid.own_height())
-    };
-    Some([0.0, 0.0, 0.0, 1.0, height, 1.0])
-}
-
 /// The fluid a registry id names, with or without `minecraft:`.
 fn fluid_kind(fluid: &str) -> Option<FluidKind> {
     FluidKind::from_name(&horizon_client::command::args::normalized(fluid))
+}
+
+/// The world fluid a registered key names; None for a tank-only fluid.
+pub(super) fn key_fluid_kind(fluid: FluidKey) -> Option<FluidKind> {
+    FluidKind::from_name(mod_api::__private::fluid_id(fluid)?)
+}
+
+/// A level's fluids as `FluidState.getHeight` and `getHeightForCamera` read them around a
+/// position: an unloaded block holds no fluid and has no sturdy face.
+struct LevelFluids<'a, 'g> {
+    game: &'a Game<'g>,
+    level: LevelRef,
+}
+impl FluidHeightWorld for LevelFluids<'_, '_> {
+    type Error = std::convert::Infallible;
+    fn fluid(&mut self, pos: [i32; 3]) -> Result<EngineFluidState, Self::Error> {
+        Ok(self
+            .game
+            .level_block_state(self.level, pos)
+            .map_or(EngineFluidState::EMPTY, |state| {
+                self.game.res.behaviours().fluid(state)
+            }))
+    }
+    fn sturdy_down(&mut self, pos: [i32; 3]) -> Result<bool, Self::Error> {
+        Ok(self
+            .game
+            .level_block_state(self.level, pos)
+            .is_some_and(|state| {
+                self.game
+                    .res
+                    .behaviours()
+                    .is_face_sturdy(state, Direction::Down)
+            }))
+    }
 }
 
 impl Game<'_> {
@@ -190,12 +211,67 @@ impl Game<'_> {
         level: LevelRef,
         pos: [i32; 3],
     ) -> Option<Vec<[f64; 6]>> {
-        let behaviours = self.res.behaviours();
-        let fluid = behaviours.fluid(self.level_block_state(level, pos)?);
-        let above = self
-            .level_block_state(level, [pos[0], pos[1] + 1, pos[2]])
-            .map(|state| behaviours.fluid(state));
-        Some(fluid_shape(fluid, above).into_iter().collect())
+        let (fluid, height) = self.level_fluid_and_height(level, pos, false)?;
+        Some(
+            (fluid.kind() != FluidKind::Empty)
+                .then_some([0.0, 0.0, 0.0, 1.0, f64::from(height), 1.0])
+                .into_iter()
+                .collect(),
+        )
+    }
+
+    /// How high the fluid at `pos` stands (`FluidState.getHeight`). None as for
+    /// `level_block_state`; an unloaded block above is no fluid.
+    pub(super) fn level_fluid_height(&self, level: LevelRef, pos: [i32; 3]) -> Option<f32> {
+        self.level_fluid_and_height(level, pos, false)
+            .map(|(_, height)| height)
+    }
+
+    /// The fluid's surface at `pos` as the camera sees it (`FluidState.getHeightForCamera`).
+    /// None as for `level_fluid_height`.
+    pub(super) fn level_fluid_height_for_camera(
+        &self,
+        level: LevelRef,
+        pos: [i32; 3],
+    ) -> Option<f32> {
+        self.level_fluid_and_height(level, pos, true)
+            .map(|(_, height)| height)
+    }
+
+    /// Whether `fluid` flowing in from `direction` may replace the fluid at `pos`
+    /// (`FluidState.canBeReplacedWith`). None as for `level_fluid_height`, and for a tank-only
+    /// fluid.
+    pub(super) fn level_fluid_can_be_replaced_with(
+        &self,
+        level: LevelRef,
+        pos: [i32; 3],
+        fluid: FluidKey,
+        direction: Direction,
+    ) -> Option<bool> {
+        let other = key_fluid_kind(fluid)?;
+        let (here, height) = self.level_fluid_and_height(level, pos, false)?;
+        Some(here.kind().can_be_replaced_with(other, direction, || height))
+    }
+
+    /// The fluid at `pos` and its height there (`FluidState.getHeight`, or
+    /// `getHeightForCamera` for `camera`). None as for `level_block_state`.
+    fn level_fluid_and_height(
+        &self,
+        level: LevelRef,
+        pos: [i32; 3],
+        camera: bool,
+    ) -> Option<(EngineFluidState, f32)> {
+        let fluid = self
+            .res
+            .behaviours()
+            .fluid(self.level_block_state(level, pos)?);
+        let world = &mut LevelFluids { game: self, level };
+        let Ok(height) = if camera {
+            fluid.camera_height_at(world, pos)
+        } else {
+            fluid.height_at(world, pos)
+        };
+        Some((fluid, height))
     }
 
     /// Whether `fluid` and `other` are the same fluid (`Fluid.isSame`): a source and its
@@ -280,34 +356,6 @@ mod tests {
     use horizon_client::items::TagRegistry;
     use mod_api::LevelHost;
     use std::sync::Arc;
-
-    #[test]
-    fn a_fluid_shape_is_full_under_the_same_fluid_and_its_own_height_otherwise() {
-        let source = EngineFluidState::WATER;
-        let shallow = EngineFluidState::new(FluidKind::FlowingWater, 3, false);
-        let lava = EngineFluidState::new(FluidKind::Lava, 8, false);
-        assert_eq!(fluid_shape(EngineFluidState::EMPTY, Some(source)), None);
-        // FlowingFluid.getOwnHeight: amount / 9, so a source is 8/9 high under air.
-        let top = |shape: Option<[f64; 6]>| shape.map(|b| b[4]);
-        assert_eq!(
-            top(fluid_shape(source, None)),
-            Some(f64::from(8.0f32 / 9.0))
-        );
-        assert_eq!(
-            top(fluid_shape(shallow, None)),
-            Some(f64::from(3.0f32 / 9.0))
-        );
-        // Flowing water under a source is the same fluid: a full block.
-        assert_eq!(top(fluid_shape(shallow, Some(source))), Some(1.0));
-        assert_eq!(
-            top(fluid_shape(source, Some(lava))),
-            Some(f64::from(8.0f32 / 9.0))
-        );
-        assert_eq!(
-            fluid_shape(source, Some(source)),
-            Some([0.0, 0.0, 0.0, 1.0, 1.0, 1.0])
-        );
-    }
 
     #[test]
     fn fluid_state_conversion_preserves_source_and_empty_invariants() {

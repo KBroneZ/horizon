@@ -139,6 +139,17 @@ pub trait BlockStatesBackend {
     #[access(Metadata)]
     fn fluid_type_properties(&self, fluid: FluidKey) -> Option<FluidTypeProperties>;
     /// Side: both.
+    /// A registered fluid's own level-independent facts (`Fluid`'s getters).
+    /// None means the owning host has no resolved registry or `fluid` isn't in it.
+    #[access(Metadata)]
+    fn fluid_facts(&self, fluid: FluidKey) -> Option<FluidFacts>;
+    /// Side: both.
+    /// The block state that holds `state` in the world (`FluidState.createLegacyBlock`).
+    /// None without a resolved registry, for a tank-only fluid and for a state its fluid
+    /// can't take.
+    #[access(Metadata)]
+    fn fluid_state_legacy_block(&self, state: FluidState) -> Option<BlockStateId>;
+    /// Side: both.
     /// Validate partial property constraints in input order with indexed errors.
     /// An unavailable or tank-only definition returns NoWorldState.
     #[access(Metadata)]

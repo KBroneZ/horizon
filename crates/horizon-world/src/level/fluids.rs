@@ -177,15 +177,9 @@ impl<L: LevelAccess + ?Sized> Sim<'_, L> {
         other: FluidKind,
         direction: Direction,
     ) -> bool {
-        match fluid.kind() {
-            FluidKind::Empty => true,
-            FluidKind::Water | FluidKind::FlowingWater => {
-                direction == Direction::Down && !is_water(other)
-            }
-            // NeoForge's `BaseFlowingFluid.canBeReplacedWith`: nothing replaces it.
-            FluidKind::Mod(_) | FluidKind::ModFlowing(_) => false,
-            _ => self.fluid_height(fluid, pos) >= 0.444_444_45 && is_water(other),
-        }
+        fluid
+            .kind()
+            .can_be_replaced_with(other, direction, || self.fluid_height(fluid, pos))
     }
 
     // ---- shape occlusion ----

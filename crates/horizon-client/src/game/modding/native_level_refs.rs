@@ -11,7 +11,7 @@ use horizon_core::{
 use horizon_items::items::ItemStack;
 use mod_api::mod_chunk_tickets::ModTicket;
 use mod_api::{
-    BlockHit, BlockStateId, BlockTransformPreview, ChunkRef, ChunkStatus, DimensionKey, Hand,
+    BlockHit, BlockStateId, BlockTransformPreview, ChunkRef, ChunkStatus, DimensionKey, FluidKey, Hand,
     LevelRef, LightLayer, MapState, NativeClipBlock, NativeClipFluid, NativeTicketOwner, PlayerRef,
     RespawnData, TicketController, Vec3,
 };
@@ -682,6 +682,33 @@ impl Game<'_> {
         self.with_level(|b, level, ticks| b.random_tick(level, ticks, at));
         let _ = self.process_level_events();
         true
+    }
+    /// The fluid tick path for `pos` now (`Behaviours::scheduled_fluid_tick`, `FluidState.tick`).
+    /// False as for `level_block_tick`.
+    pub(super) fn level_fluid_tick(&mut self, level: LevelRef, pos: [i32; 3]) -> bool {
+        if !self.native_level_tick_allowed(level, pos) {
+            return false;
+        }
+        let at = block_pos(pos);
+        self.with_level(|b, level, ticks| b.scheduled_fluid_tick(level, ticks, at));
+        let _ = self.process_level_events();
+        true
+    }
+    /// `Fluid.getTickDelay` for `fluid` at `pos`, as a flow step asks it
+    /// (`Behaviours::fluid_tick_delay`, a mod fluid's `fluid_rules` included). None as for
+    /// `level_block_tick` refuses, and for a tank-only fluid.
+    pub(super) fn level_fluid_tick_delay(
+        &mut self,
+        level: LevelRef,
+        pos: [i32; 3],
+        fluid: FluidKey,
+    ) -> Option<i32> {
+        let fluid = super::native_world_read::key_fluid_kind(fluid)?;
+        if !self.native_level_tick_allowed(level, pos) {
+            return None;
+        }
+        let at = block_pos(pos);
+        Some(self.with_level(|b, level, ticks| b.fluid_tick_delay(level, ticks, fluid, at)))
     }
     /// Whether a tick may run at `pos`: a current handle of the level in place on the server,
     /// a loaded position inside the build height.

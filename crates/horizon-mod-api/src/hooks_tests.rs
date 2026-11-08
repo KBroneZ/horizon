@@ -418,3 +418,23 @@ fn level_queries_take_their_hosts(
     let _: Result<Option<Vec<ItemStack>>, StackWriteError> =
         level.block_drops(server, [0, 64, 0], Some(tool), Some(shooter));
 }
+
+/// Compile-only: the fluid queries as a mod calls them, the level-independent facts on any host,
+/// the position reads on any host, and the tick and its delay on a server host.
+#[allow(dead_code)]
+fn fluid_queries_take_their_hosts(
+    read: &dyn Host,
+    server: &mut dyn ServerHost,
+    level: LevelRef,
+    fluid: FluidKey,
+    state: FluidState,
+) {
+    let _: Option<FluidFacts> = read.fluid_states().facts(fluid);
+    let _: Option<BlockStateId> = read.fluid_states().legacy_block(state);
+    let _: Option<f32> = level.fluid_height(read, [0, 64, 0]);
+    let _: Option<f32> = level.fluid_height_for_camera(read, [0, 64, 0]);
+    let _: Option<bool> =
+        level.fluid_can_be_replaced_with(read, [0, 64, 0], fluid, Direction::Down);
+    let _: Option<i32> = level.fluid_tick_delay(server, [0, 64, 0], fluid);
+    let _: bool = level.fluid_tick(server, [0, 64, 0]);
+}

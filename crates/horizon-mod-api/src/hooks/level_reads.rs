@@ -75,4 +75,22 @@ accepts, for example the first living entity. A ray starting inside a box does n
 pass the shooter as `exclude` or start outside it. Candidates are the entities `entities_in`
 finds, so spectators are never hit."#]
     fn level_reads_note2();
+    #[notes = r#"## Fluid heights, replacement and ticks
+
+`LevelRef::fluid_height(host, pos)` is `FluidState.getHeight`, and
+`fluid_height_for_camera(host, pos)` is `getHeightForCamera`, where a source under a sturdy
+bottom face fills the block. `fluid_can_be_replaced_with(host, pos, fluid, direction)` is
+`canBeReplacedWith`: whether `fluid` flowing in from `direction` may take the place. These three
+read loaded blocks only, on either side.
+
+`fluid_tick(host, pos)` runs the fluid's tick now through the path a due fluid tick takes
+(`FluidState.tick`), and `fluid_tick_delay(host, pos, fluid)` is `Fluid.getTickDelay`, the
+delay a flow step schedules with. Both take a `ServerHost` and the level in place: the delay
+asks a mod fluid's `fluid_rules` listeners, as the flow does. Queue a fluid tick with a
+`LevelWriteHost`'s `schedule_fluid_tick`; there is no second scheduling route.
+
+What a fluid is apart from any level is on `host.fluid_states()`: `facts(key)` gives its
+explosion resistance, whether it ticks randomly and its drip particle, and
+`legacy_block(state)` the liquid block that holds a fluid state in the world."#]
+    fn level_reads_note4();
 }
