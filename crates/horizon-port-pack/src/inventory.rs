@@ -52,6 +52,24 @@ fn jar_of(pack_jar: Option<&PathBuf>, file_name: &str, work: &Path) -> Option<Pa
         .filter(|p| p.is_file())
 }
 
+/// The sides a mod runs on: what the pack declares, else Modrinth's. A side Modrinth lists as
+/// `unsupported` stays unsupported whatever the pack says: Fabulously Optimized's index marks
+/// every mod `required` on both sides, client-only ones such as Mod Menu and Zoomify included,
+/// and read that way they were taken for mods with server behaviour.
+fn sides(pack: (&str, &str), modrinth: Option<(String, String)>) -> (String, String) {
+    let Some((client, server)) = modrinth else {
+        return (pack.0.to_owned(), pack.1.to_owned());
+    };
+    let pick = |declared: &str, listed: String| {
+        if declared.is_empty() || listed == "unsupported" {
+            listed
+        } else {
+            declared.to_owned()
+        }
+    };
+    (pick(pack.0, client), pick(pack.1, server))
+}
+
 pub fn build(pack: &Pack, cache: &Cache, work: &Path) -> Vec<Record> {
     let known = Known::atm10();
     let mut records = Vec::new();
@@ -81,10 +99,10 @@ pub fn build(pack: &Pack, cache: &Cache, work: &Path) -> Vec<Record> {
             .or_else(|| f.mod_id.clone())
             .or_else(|| Some(p("slug")).filter(|s| !s.is_empty()))
             .unwrap_or(stem);
-        let (client, server) = match project {
-            Some(_) if f.client.is_empty() => (p("client_side"), p("server_side")),
-            _ => (f.client.clone(), f.server.clone()),
-        };
+        let (client, server) = sides(
+            (&f.client, &f.server),
+            project.map(|_| (p("client_side"), p("server_side"))),
+        );
         let census = info.as_ref().map(|i| &i.census);
         let facts = Facts {
             kind: f.kind(),
@@ -226,4 +244,54 @@ pub fn csv(records: &[Record]) -> String {
         out.push_str(&format!("{},{}\n", cells.join(","), r.layer));
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sides;
+
+    fn modrinth(client: &str, server: &str) -> Option<(String, String)> {
+        Some((client.to_owned(), server.to_owned()))
+    }
+
+    #[test]
+    fn a_side_modrinth_marks_unsupported_beats_the_packs_required() {
+        assert_eq!(
+            sides(
+                ("required", "required"),
+                modrinth("required", "unsupported")
+            ),
+            ("required".into(), "unsupported".into())
+        );
+        assert_eq!(
+            sides(
+                ("required", "required"),
+                modrinth("unsupported", "required")
+            ),
+            ("unsupported".into(), "required".into())
+        );
+    }
+
+    #[test]
+    fn the_packs_declaration_stands_otherwise() {
+        assert_eq!(
+            sides(
+                ("optional", "unsupported"),
+                modrinth("required", "optional")
+            ),
+            ("optional".into(), "unsupported".into())
+        );
+        assert_eq!(
+            sides(("required", "required"), None),
+            ("required".into(), "required".into())
+        );
+    }
+
+    #[test]
+    fn modrinth_fills_in_sides_the_pack_leaves_out() {
+        assert_eq!(
+            sides(("", ""), modrinth("required", "unsupported")),
+            ("required".into(), "unsupported".into())
+        );
+    }
 }
