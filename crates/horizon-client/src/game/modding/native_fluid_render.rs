@@ -120,6 +120,24 @@ mod tests {
         (result, draw.into_vertices())
     }
 
+    /// Each quad's least and greatest UV, which must be the same on both axes.
+    fn tile_uvs(vertices: &[Vertex]) -> Vec<[f32; 2]> {
+        vertices
+            .chunks(4)
+            .map(|quad| {
+                let range = |axis: usize| {
+                    let all = quad.iter().map(|vertex| vertex.uv[axis]);
+                    [
+                        all.clone().fold(f32::MAX, f32::min),
+                        all.fold(f32::MIN, f32::max),
+                    ]
+                };
+                assert_eq!(range(0), range(1), "{quad:?}");
+                range(0)
+            })
+            .collect()
+    }
+
     #[test]
     fn water_tiles_under_the_pose_in_its_own_material_with_the_stack_tint() {
         let (result, vertices) = drawn(
@@ -138,6 +156,8 @@ mod tests {
         let xs = vertices.iter().map(|v| v.pos[0]);
         assert_eq!(xs.clone().fold(f32::MAX, f32::min), 1.0);
         assert_eq!(xs.fold(f32::MIN, f32::max), 3.0);
+        // Every tile spans a whole block, so each quad shows the whole sprite once.
+        assert_eq!(tile_uvs(&vertices), [[0.0, 1.0]; 8]);
     }
 
     #[test]
@@ -145,7 +165,7 @@ mod tests {
         let (result, vertices) = drawn(
             &stack("minecraft:lava", 1),
             [0.0, 0.0, 0.0, 1.0, 1.0, 1.0],
-            FluidBoxOptions::new(true, 0.0).with_argb(0x8011_2233),
+            FluidBoxOptions::new(true, 0.5).with_argb(0x8011_2233),
         );
         assert_eq!(result, Ok(()));
         assert_eq!(vertices.len(), 6 * 4);
@@ -155,6 +175,8 @@ mod tests {
                 .iter()
                 .all(|v| v.light == 0xF0C0 && v.color == 0x8033_2211)
         );
+        // A ratio of 0.5 pulls each UV an eighth of the way to the sprite's centre.
+        assert_eq!(tile_uvs(&vertices), [[0.0625, 0.9375]; 6]);
     }
 
     #[test]
