@@ -206,9 +206,34 @@ pub fn mods_toml(text: &str) -> Result<JarInfo, String> {
     })
 }
 
+/// Fabric Loader reads `fabric.mod.json` leniently, and mods rely on it: Entity Texture
+/// Features writes a description with raw line breaks inside the string, which strict JSON
+/// refuses. Parse strictly first; if that fails, retry with the control characters inside
+/// strings escaped, and report the strict error when the retry fails too.
+fn lenient_json(text: &str) -> Result<serde_json::Value, serde_json::Error> {
+    serde_json::from_str(text).or_else(|strict| {
+        let mut fixed = String::with_capacity(text.len());
+        let (mut in_string, mut escaped) = (false, false);
+        for c in text.chars() {
+            if escaped {
+                escaped = false;
+            } else if in_string && c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = !in_string;
+            } else if in_string && c.is_control() {
+                // `\u00XX` is valid for every control character.
+                fixed.push_str(&format!("\\u{:04x}", c as u32));
+                continue;
+            }
+            fixed.push(c);
+        }
+        serde_json::from_str(&fixed).map_err(|_| strict)
+    })
+}
+
 pub fn fabric(text: &str) -> Result<JarInfo, String> {
-    let v: serde_json::Value =
-        serde_json::from_str(text).map_err(|e| format!("fabric.mod.json: {e}"))?;
+    let v = lenient_json(text).map_err(|e| format!("fabric.mod.json: {e}"))?;
     let s = |k: &str| v[k].as_str().unwrap_or("").to_owned();
     let license = match &v["license"] {
         serde_json::Value::Array(l) => l
@@ -410,6 +435,23 @@ mandatory = true
         .unwrap();
         assert_eq!(info.license, "MIT OR Apache-2.0");
         assert_eq!(info.depends, ["cloth-config"]);
+    }
+
+    #[test]
+    fn fabric_metadata_may_break_a_description_over_lines() {
+        // As Entity Texture Features writes it: raw line breaks and a tab inside the string,
+        // after an escaped quote that must not end the string early.
+        let info = fabric(
+            "{\"id\": \"etf\", \"version\": \"7\", \"name\": \"ETF\", \"license\": \"LGPL-3.0\",\n \
+             \"description\": \"Adds \\\"things\\\"\nSupports:\n\t - Random\",\n \
+             \"depends\": {\"minecraft\": \"*\", \"yacl\": \"*\"}}",
+        )
+        .unwrap();
+        assert_eq!(info.mod_id, "etf");
+        assert_eq!(info.license, "LGPL-3.0");
+        assert_eq!(info.depends, ["yacl"]);
+        // Anything else that is not JSON still fails.
+        assert!(fabric("{\"id\": \"etf\"").is_err());
     }
 
     #[test]
