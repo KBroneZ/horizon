@@ -8,7 +8,7 @@ fn stack(item: &str, count: u32) -> Option<Stack> {
         item: format!("minecraft:{item}"),
         count,
         max,
-        kind: item.bytes().fold(0, |h, b| h * 31 + u64::from(b)),
+        kind: item.bytes().fold(0, |h, b| h.wrapping_mul(31).wrapping_add(u64::from(b))),
     })
 }
 

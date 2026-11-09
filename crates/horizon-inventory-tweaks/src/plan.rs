@@ -115,7 +115,7 @@ mod tests {
             "diamond_sword" => 1,
             _ => 64,
         };
-        let kind = item.bytes().fold(0u64, |h, b| h * 31 + u64::from(b));
+        let kind = item.bytes().fold(0u64, |h, b| h.wrapping_mul(31).wrapping_add(u64::from(b)));
         Some(Stack {
             item: format!("minecraft:{item}"),
             count,
