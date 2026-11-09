@@ -37,7 +37,6 @@ fn role(role: NativeSlotRole) -> Role {
         NativeSlotRole::CraftingGrid | NativeSlotRole::Input => Role::Input,
         NativeSlotRole::Result => Role::Result,
         NativeSlotRole::Equipment => Role::Equipment,
-        _ => Role::Other,
     }
 }
 
@@ -59,7 +58,7 @@ fn game_slot(slot: SlotId) -> usize {
     slot.0 as usize
 }
 
-impl Game<'_> {
+impl<'a> Game<'a> {
     /// The open menu's type: the server's, else the menu this window opened itself.
     fn container_menu(&self) -> &str {
         if let Some(menu) = self.remote_menu_type() {
@@ -118,7 +117,7 @@ impl Game<'_> {
         Some(self.inventory_origin(&HudBatch::new([r.config.width, r.config.height])))
     }
     /// The open screen for the hooks' input, None when no hook may take it.
-    fn container_open(&mut self) -> Option<Open<'_, '_>> {
+    fn container_open(&mut self) -> Option<Open<'_, 'a>> {
         if self.screen != Screen::Inventory || !engine::containers() {
             return None;
         }
