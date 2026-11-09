@@ -6436,7 +6436,7 @@ impl Game<'_> {
         self.draw_hovered_slot_highlight(batch, false, ox, oy);
         self.draw_inventory_slots(batch, ox, oy);
         self.draw_hovered_slot_highlight(batch, true, ox, oy);
-        self.draw_sort_buttons(batch, ox, oy);
+        self.draw_container_extras(batch, ox, oy);
         self.draw_recipe_book(batch);
         let effect_tip = if self.container.is_none() && self.craft_size == 2 && !self.mount_active()
         {
@@ -10437,7 +10437,7 @@ impl Game<'_> {
                     if self.screen == Screen::Inventory
                         && d != 0.0
                         && !bundle
-                        && !self.tweak_scroll(d, self.inventory_target().0)
+                        && !self.container_scroll(d)
                     {
                         self.station_scroll(d);
                     }
@@ -10602,7 +10602,7 @@ impl Game<'_> {
                         return Ok(());
                     }
                     if pressed
-                        && (self.sort_mouse_press(button)
+                        && (self.container_mouse_press(button)
                             || self.hud_editor_key_press(&horizon_client::keybinds::mouse_name(
                                 button,
                             )))
