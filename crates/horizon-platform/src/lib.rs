@@ -80,7 +80,7 @@ pub mod lang {
 /// How the game draws a few things a crate may change, per player (`horizon_hooks::look`):
 /// vanilla's until set.
 pub mod look {
-    pub use horizon_hooks::look::{Chat, Frame, Look, set};
+    pub use horizon_hooks::look::{Chat, Frame, Look, update};
 }
 
 /// Drawing on the HUD (docs/layers.md, "Platform registries").

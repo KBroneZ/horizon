@@ -22,7 +22,7 @@ Each feature is built from what it visibly does, never from another client's or 
 | Settings, parsing, the page's rows | `crates/horizon-client-render/src/pvp.rs` (stored in `horizon-extras.txt`, see [extras.md](extras.md)) |
 | The page | `options_ui.rs` (`Page::Pvp`), the rows of `pvp::rows()` drawn like the Extras page |
 | Game glue | `crates/horizon-client/src/game/extras/pvp.rs` |
-| What the engine draws differently | `horizon_hooks::look` (`Look`, set each frame from the options by `Pvp::look`); the engine reads it only in `game/look.rs` |
+| What the engine draws differently | `horizon_hooks::look` (`Look`, PvP & HUD's fields set each frame from the options by `Pvp::apply`); the engine reads it only in `game/look.rs` |
 
 ## Crosshair (`crosshair`, default off)
 

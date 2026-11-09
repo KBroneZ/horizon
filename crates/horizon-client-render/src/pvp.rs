@@ -522,9 +522,9 @@ impl Hit {
 
 impl Pvp {
     /// What the engine reads of these options (`horizon_hooks::look`): all it draws differently.
-    pub fn look(&self) -> Look {
+    /// Sets PvP & HUD's fields of `look`, the others' stay.
+    pub fn apply(&self, look: &mut Look) {
         let (c, t) = (self.combat, self.tweaks);
-        let mut look = Look::default();
         look.legacy_pose = c.legacy;
         look.hide_attack_indicator = c.legacy && !c.indicator;
         look.mute_attack_sounds = c.legacy && c.sounds;
@@ -544,6 +544,11 @@ impl Pvp {
         look.hide_effect_icons = self.hud.effects;
         look.time_of_day = t.time.map(ViewTime::day_time);
         look.weather = t.weather.map(ViewWeather::levels);
+    }
+    /// [`Pvp::apply`] on vanilla's look.
+    pub fn look(&self) -> Look {
+        let mut look = Look::default();
+        self.apply(&mut look);
         look
     }
 }

@@ -2,9 +2,10 @@
 //! HUD's look today. Every field's default is vanilla's, so with nothing set the game looks and
 //! sounds as vanilla does.
 //!
-//! Plain data, pushed: a crate sets the whole look of the player whose turn it is ([`set`],
-//! splitscreen players each have theirs: [`crate::seat`]) when its settings load or change, and
-//! the engine reads it where it draws ([`engine::get`]). Nothing is asked of the crate per frame.
+//! Plain data, pushed: a crate changes its own fields of the look of the player whose turn it is
+//! ([`update`]; splitscreen players each have theirs: [`crate::seat`]) when its settings load or
+//! change, and the engine reads it where it draws ([`engine::get`]). Several crates share the
+//! look, each keeping to its fields. Nothing is asked of a crate per frame.
 use std::sync::Mutex;
 
 /// What the engine reads. Built from `Look::default()`, then its fields set.
@@ -107,14 +108,15 @@ pub struct Chat {
 /// Each seat's look; a seat that never set one has vanilla's.
 static LOOKS: Mutex<Vec<Look>> = Mutex::new(Vec::new());
 
-/// The look of the player whose turn it is.
-pub fn set(look: Look) {
+/// Changes the look of the player whose turn it is: `change` sets the fields its crate owns and
+/// leaves the others' be.
+pub fn update(change: impl FnOnce(&mut Look)) {
     let mut looks = LOOKS.lock().unwrap_or_else(|e| e.into_inner());
     let seat = crate::seat();
     if looks.len() <= seat {
         looks.resize(seat + 1, Look::default());
     }
-    looks[seat] = look;
+    change(&mut looks[seat]);
 }
 
 /// The engine's side. Only the engine calls it.
@@ -137,11 +139,11 @@ mod tests {
         // Seats no other test plays, as the looks are shared.
         crate::engine::set_seat(5);
         assert_eq!(engine::get(), Look::default());
-        set(Look {
-            legacy_pose: true,
-            ..Look::default()
-        });
-        assert!(engine::get().legacy_pose);
+        update(|look| look.legacy_pose = true);
+        // Another crate's change keeps the first one's.
+        update(|look| look.clear_water = true);
+        let look = engine::get();
+        assert!(look.legacy_pose && look.clear_water);
         crate::engine::set_seat(4);
         assert_eq!(engine::get(), Look::default());
         crate::engine::set_seat(0);

@@ -181,7 +181,7 @@ impl Game<'_> {
     pub(in crate::game) fn pvp_frame(&mut self) {
         let tweaks = self.settings.extras.pvp.tweaks;
         horizon_client::enchant::set_numeric_levels(tweaks.numeric_enchants);
-        horizon_hooks::look::set(self.settings.extras.pvp.look());
+        horizon_hooks::look::update(|look| self.settings.extras.pvp.apply(look));
     }
     /// Legacy rules: the hits a server resolves follow 1.8.9 (`legacy_rules.rs`).
     pub(in crate::game) fn pvp_legacy_rules(&self) -> bool {
