@@ -56,6 +56,9 @@ pub trait Page: Sync {
     fn back(&self) -> &'static str {
         "gui.done"
     }
+    /// The page opens as a form (at [`Place::Title`]), before its rows are read: a form starts
+    /// over each time, as vanilla's screens do. Nothing by default.
+    fn opened(&self) {}
 }
 
 /// A row of a page. Labels are translation keys.

@@ -375,6 +375,7 @@ pub trait Page: Sync {
     fn act(&self, row: usize, act: Act);     // a click, a reverse click, a slider's value, a key
     fn tooltip(&self, row: usize) -> Option<Label> { None }   // hover text, may follow the value
     fn back(&self) -> &'static str { "gui.done" }            // the leave button of a page drawn as a screen
+    fn opened(&self) {}                                       // a form (Place::Title) opens: start over
 }
 pub enum Row {
     Heading(&'static str),                   // translation key
@@ -393,8 +394,8 @@ pub enum Act { Press, PressBack, Slide(f32), Bind(String), Edit(String), Submit 
 pub fn connect(address: impl Into<String>);                   // from a Title page's act: join that server
 ```
 
-- `HorizonSettings`: a row of the Horizon Settings page, after the engine's own pages. `Title` and `Pause`: a
-  button on the title screen or the pause menu that opens the page. These buttons exist only when something
+- `HorizonSettings`: a row of the Horizon Settings page, after the engine's own pages. `Pause`: a
+  button on the pause menu that opens the page. These buttons exist only when something
   registered, so the vanilla menus keep vanilla's look. The page is drawn with the same widgets, tooltips,
   narration, controller focus and `horizon-ctl` ids as the engine's pages.
 - `PauseFriends`: what the pause menu's vanilla Friends icon opens. The icon is active while a page is registered
@@ -408,9 +409,9 @@ pub fn connect(address: impl Into<String>);                   // from a Title pa
   keeps its place and look at every GUI scale, and opens the first page registered there as a form drawn as Join a
   Friend is (`multiplayer/page.rs`): the title, the rows from y 53 (a field's grey label, its 200-wide box 11
   below, 41 a field), the buttons in a column from a quarter of the height + 114, the back button last
-  (`Page::back`, `gui.cancel` for a form). It shows heading, note, text, space, field and button rows. With no page
-  there the icon opens the engine's Join a Friend while an invite-code resolver is registered, else it is
-  inactive.
+  (`Page::back`, `gui.cancel` for a form). It shows heading, note, text, space, field and button rows, and calls
+  `Page::opened` each time it opens. With no page there (horizon-client's own executable) the icon is inactive.
+  horizon-friends' Join a Friend is the official executable's.
 - `Field` is vanilla's `EditBox` on a page drawn as its own screen: focus by click or Tab, typing, the caret keys,
   selection, copy and paste, at most `max` characters (32 by default). The engine keeps its text while the page is
   open and sends each change (`Act::Edit`, before any other act or redraw reaches the page) and Enter

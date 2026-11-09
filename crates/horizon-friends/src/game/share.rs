@@ -167,9 +167,23 @@ fn preference(key: &str) -> Option<String> {
     })
 }
 
+/// Set (or, with None, remove) one of them in `dir`'s horizon.txt, keeping the others.
+pub(super) fn set_preference(dir: &std::path::Path, key: &str, value: Option<&str>) {
+    let text = std::fs::read_to_string(dir.join("horizon.txt")).unwrap_or_default();
+    let mut lines: Vec<&str> = text
+        .lines()
+        .filter(|l| l.split_once(':').is_none_or(|(k, _)| k.trim() != key))
+        .collect();
+    let line = value.map(|v| format!("{key}:{v}"));
+    lines.extend(line.as_deref());
+    let mut out = lines.join("\n");
+    out.push('\n');
+    let _ = std::fs::write(dir.join("horizon.txt"), out);
+}
+
 /// The relay the player set on Join a Friend (`friendsRelay`), else `HORIZON_RELAY_URL`. None
 /// by default.
-fn relay() -> Option<String> {
+pub(super) fn relay() -> Option<String> {
     preference("friendsRelay")
         .filter(|r| !r.is_empty())
         .or_else(crate::relay_url)

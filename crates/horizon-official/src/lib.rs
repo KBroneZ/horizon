@@ -28,10 +28,12 @@ const STORES: [&dyn settings::Store; 1] = [&horizon_discord::SETTING];
 /// The lang files with their text (their `assets/lang`).
 const LANG: [&lang::Files; 1] = [horizon_friends::game::LANG];
 /// Their rows and pages in the options screens and menus.
-const PAGES: [&dyn pages::Page; 2] = [
+const PAGES: [&dyn pages::Page; 3] = [
     &horizon_discord::SECTION,
     // Play with Friends, what the pause menu's Friends icon opens.
     &horizon_friends::game::PAGE,
+    // Join a Friend, what the title screen's Friends icon opens.
+    &horizon_friends::game::JOIN,
 ];
 
 /// Registers Horizon's in-game parts with the game. The executable calls it before it runs the
