@@ -535,16 +535,7 @@ pub fn shown_address(address: &str) -> String {
     }
 }
 
-/// The relay the player set (`friendsRelay` in horizon.txt, beside
-/// options.txt), else the resolver's (`HORIZON_RELAY_URL`). None by default.
-pub fn friends_relay_setting() -> Option<String> {
-    let dir = std::env::current_dir().ok()?;
-    crate::ui_theme::preference(&dir, "friendsRelay")
-        .filter(|r| !r.is_empty())
-        .or_else(|| horizon_hooks::engine::tunnel().and_then(|r| r.relay_from_env()))
-}
-
-/// Reach the friend's world from the code (directly, or through a relay)
+/// Reach the friend's world from the code (directly, or through the resolver's relay)
 /// and open the tunnel: the loopback address to connect to, and the token to send on it first.
 /// Without a resolver (a build without Play with Friends) the address is refused, never retried.
 fn join_friend(
@@ -571,9 +562,7 @@ fn join_friend(
         };
         status(send, &tr(lang, key));
     };
-    let opened = resolver
-        .open(code, friends_relay_setting(), &mut progress)
-        .map_err(Reason::plain)?;
+    let opened = resolver.open(code, &mut progress).map_err(Reason::plain)?;
     Ok(("127.0.0.1".to_owned(), opened.port, opened.token))
 }
 

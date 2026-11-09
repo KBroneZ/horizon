@@ -87,20 +87,12 @@ impl Resolver for Invites {
         }
     }
 
-    fn relay_from_env(&self) -> Option<String> {
-        crate::relay_url()
-    }
-
-    fn open(
-        &self,
-        code: &str,
-        relay: Option<String>,
-        progress: &mut dyn FnMut(Progress),
-    ) -> Result<Opened, String> {
+    /// Through the relay the player set on Join a Friend, else `HORIZON_RELAY_URL`.
+    fn open(&self, code: &str, progress: &mut dyn FnMut(Progress)) -> Result<Opened, String> {
         progress(Progress::Finding);
         let tunnel = guest::join(&GuestConfig {
             code: code.to_owned(),
-            relay,
+            relay: share::relay(),
             protocol: PROTOCOL_VERSION,
             game: VANILLA_VERSION.to_owned(),
             path: PathMode::from_env(),
