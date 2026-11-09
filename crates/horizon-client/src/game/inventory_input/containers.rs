@@ -3,12 +3,7 @@
 //! and the input and drawing that reach the hooks. With no hook registered nothing here is built.
 use crate::game::{Game, NativeSlotRole, Screen};
 use horizon_client::{
-    extras_hud,
-    hud::HudBatch,
-    items::ItemStack,
-    keybinds,
-    menu::Input,
-    stations::hover_name,
+    extras_hud, hud::HudBatch, items::ItemStack, keybinds, menu::Input, stations::hover_name,
 };
 use horizon_hooks::{
     containers::{Click, Container, Role, Slot, SlotId, Stack},
@@ -296,7 +291,11 @@ mod tests {
     #[test]
     fn stacks_that_merge_share_a_kind() {
         let a = kind(&stack("minecraft:stone", 1, 0));
-        assert_eq!(a, kind(&stack("minecraft:stone", 64, 0)), "the count is no part");
+        assert_eq!(
+            a,
+            kind(&stack("minecraft:stone", 64, 0)),
+            "the count is no part"
+        );
         assert_ne!(a, kind(&stack("minecraft:dirt", 1, 0)));
         let worn = stack("minecraft:iron_sword", 1, 3);
         assert_ne!(kind(&worn), kind(&stack("minecraft:iron_sword", 1, 0)));
