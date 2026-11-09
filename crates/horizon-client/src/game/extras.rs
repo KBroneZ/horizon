@@ -4,9 +4,9 @@
 //! Each hook does nothing while its extra is off and no mod uses it.
 //!
 //! Each Horizon extra's game glue is a child module here, so it leaves the engine in one move
-//! (docs/layers.md, plan M5): `reconnect` (auto-reconnect), `pvp` (the PvP & HUD options).
+//! (docs/layers.md, plan M5): `pvp` (the PvP & HUD options). Auto-reconnect left already
+//! (`horizon-reconnect`).
 pub(in crate::game) mod pvp;
-mod reconnect;
 
 use super::{Dim, Game, Screen, native_hooks::NativeMinimap};
 use horizon_client::{
@@ -58,7 +58,6 @@ impl Game<'_> {
         if !playing {
             self.extras.mouse = [false; 2];
         }
-        self.sync_reconnect_setting();
         self.update_minimap();
         // For mods (`render.frame-stats`, `native_frame_rate`).
         let now = self.extras_now();
