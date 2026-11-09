@@ -996,6 +996,9 @@ fn effects_from_blocks(
         );
         if w.block_name(x, y, z) == "minecraft:magma_block" {
             m.damage(level, 1.0, Damage::of(DamageKind::HotFloor));
+            // The hurt's teleport lands inside `stepOn`; the scan below keeps
+            // the path fixed above.
+            hurt_teleports(m, w, events);
         }
         // TurtleEggBlock.stepOn: a mob never steps carefully, so an egg under
         // it breaks one time in a hundred (`destroyEgg`), unless it is a turtle
@@ -1393,6 +1396,9 @@ fn base_tick(
         } else {
             if m.fire_ticks % 20 == 0 && !m.fluids.in_lava {
                 m.damage(level, 1.0, Damage::of(DamageKind::OnFire));
+                // Enderman.hurtServer teleports before the hurt returns, so
+                // aiStep's fire contact reads the landing spot.
+                hurt_teleports(m, w, events);
             }
             m.fire_ticks -= 1;
         }
