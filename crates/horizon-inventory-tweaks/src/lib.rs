@@ -208,7 +208,7 @@ impl Page for Section {
         });
     }
     fn tooltip(&self, row: usize) -> Option<Label> {
-        ROWS.get(row).map(|(_, about)| Label::Key(about))
+        ROWS.get(row).map(|&(_, about)| Label::Key(about))
     }
     /// The wheel and the key do nothing while their switch is off: greyed out.
     fn live(&self, row: usize) -> bool {

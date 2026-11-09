@@ -77,10 +77,16 @@ impl Menu {
         };
         let n = n.min(hand.count);
         let slot = self.at(id);
-        match slot {
-            None => *slot = Some(Stack { count: n, ..hand.clone() }),
-            Some(s) if s.kind == hand.kind && s.count + n <= s.max => s.count += n,
-            _ => return false,
+        if let Some(s) = slot {
+            if s.kind != hand.kind || s.count + n > s.max {
+                return false;
+            }
+            s.count += n;
+        } else {
+            *slot = Some(Stack {
+                count: n,
+                ..hand.clone()
+            });
         }
         self.carried = (hand.count > n).then(|| Stack {
             count: hand.count - n,
