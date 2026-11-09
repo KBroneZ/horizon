@@ -119,9 +119,6 @@ impl Game<'_> {
         if self.mod_browser_press(right) {
             return;
         }
-        if !right && self.sort_press() {
-            return;
-        }
         if self.native_screen_press(right) {
             self.inv_clicks.skip_release();
             return;
@@ -164,7 +161,7 @@ impl Game<'_> {
             }
             return;
         }
-        if self.tweak_press(slot, right, shift) || self.container_press(right) {
+        if self.container_press(right) {
             return;
         }
         if let Some(slot) = slot
@@ -266,9 +263,7 @@ impl Game<'_> {
     }
     /// Mouse movement while a quick craft drag is running.
     pub(super) fn inventory_drag_move(&mut self) {
-        if self.tweaks_on() && self.tweak_drag_move(self.inventory_target().0)
-            || self.container_drag()
-        {
+        if self.container_drag() {
             return;
         }
         let Some((ty, slots)) = self.inv_drag.clone() else {
@@ -430,7 +425,6 @@ impl Game<'_> {
     /// cancels the drag, drops a stack released outside, or clicks.
     pub(super) fn inventory_mouse_release(&mut self, right: bool) {
         use horizon_client::container_screen::{Release, Target};
-        self.tweak_release();
         self.container_release();
         let (slot, outside) = self.inventory_target();
         let dragged = self.inv_drag.as_ref().is_some_and(|(_, s)| !s.is_empty());
