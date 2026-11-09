@@ -180,8 +180,9 @@ impl Game<'_> {
         if self.recipe_search_focused() {
             return false;
         }
+        let slot = self.hovered();
         self.container_open()
-            .is_some_and(|mut c| engine::container_key(&mut c, name))
+            .is_some_and(|mut c| engine::container_key(&mut c, slot, name))
     }
     /// Draws the sort buttons and the hooks' drawing over the panel at (`ox`, `oy`).
     pub(in crate::game) fn draw_container_extras(&self, batch: &mut HudBatch, ox: f32, oy: f32) {

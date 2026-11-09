@@ -126,8 +126,9 @@ pub trait Hooks: Sync {
     fn container_wheel(&self, _c: &mut dyn Container, _slot: Option<SlotId>, _steps: f32) -> bool {
         false
     }
-    /// A key or a mouse button the screen got, by its name (`key.keyboard.r`, `key.mouse.middle`).
-    fn container_key(&self, _c: &mut dyn Container, _key: &str) -> bool {
+    /// A key or a mouse button the screen got, by its name (`key.keyboard.r`, `key.mouse.middle`),
+    /// with the cursor over `slot` or none.
+    fn container_key(&self, _c: &mut dyn Container, _slot: Option<SlotId>, _key: &str) -> bool {
         false
     }
     /// Draws over the panel, from its top left corner, after the slots and before the tooltip.
@@ -419,8 +420,8 @@ pub mod engine {
     }
 
     /// [`Hooks::container_key`].
-    pub fn container_key(c: &mut dyn Container, key: &str) -> bool {
-        all().iter().any(|h| h.container_key(c, key))
+    pub fn container_key(c: &mut dyn Container, slot: Option<SlotId>, key: &str) -> bool {
+        all().iter().any(|h| h.container_key(c, slot, key))
     }
 
     /// [`Hooks::container_draw`].
@@ -636,7 +637,7 @@ mod tests {
     /// Takes its key on a container screen; notes what reached it.
     struct Keys(&'static str, StdMutex<Vec<String>>);
     impl Hooks for Keys {
-        fn container_key(&self, _: &mut dyn Container, key: &str) -> bool {
+        fn container_key(&self, _: &mut dyn Container, _: Option<SlotId>, key: &str) -> bool {
             self.1.lock().unwrap().push(format!("key {key}"));
             key == self.0
         }
@@ -706,8 +707,8 @@ mod tests {
         }
         // A container screen's key goes to the first hook that takes it, its release to all.
         assert!(engine::containers());
-        assert!(!engine::container_key(&mut Empty, "key.keyboard.e"));
-        assert!(engine::container_key(&mut Empty, "key.keyboard.r"));
+        assert!(!engine::container_key(&mut Empty, None, "key.keyboard.e"));
+        assert!(engine::container_key(&mut Empty, None, "key.keyboard.r"));
         engine::container_release(&mut Empty);
         assert_eq!(
             *SORT.1.lock().unwrap(),
