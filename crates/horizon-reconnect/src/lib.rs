@@ -371,8 +371,9 @@ mod tests {
             Some("disconnect.loginFailedInfo.insufficientPrivileges"),
             false
         ));
+        // The engine's text for it (`net::NOT_SIGNED_IN`).
         assert!(!allowed(
-            crate::net::NOT_SIGNED_IN,
+            "This server is in online mode. Sign in with your Microsoft account in the Horizon launcher to join it.",
             Some("horizon.multiplayer.not_signed_in"),
             false
         ));
