@@ -9265,7 +9265,7 @@ impl Renderer {
                 }
             };
             // A custom outline (PvP & HUD) takes the bright stroke's colour, scales both widths.
-            let (custom, scale) = frame.look.outline.map_or((None, 1.0), |(c, s)| (Some(c), s));
+            let (custom, scale) = frame.look.outline.map_or((None, 1.0), |o| (Some(o.0), o.1));
             if frame.outline_high_contrast {
                 stroke(0xff00_0000, 7.0 * scale, lines);
                 stroke(custom.unwrap_or(0xff57_ffe1), width * scale, lines);

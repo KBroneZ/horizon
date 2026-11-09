@@ -20,7 +20,10 @@ impl Game<'_> {
     /// A particle a server sent that this player doesn't see: with the attack particles hidden,
     /// the sweep and the damage hearts, which 1.9 added to a hit (1.8.9's show crits only).
     pub(super) fn particle_hidden(&self, ty: ParticleType) -> bool {
-        let attack = matches!(ty, ParticleType::SweepAttack | ParticleType::DamageIndicator);
+        let attack = matches!(
+            ty,
+            ParticleType::SweepAttack | ParticleType::DamageIndicator
+        );
         attack && look().hide_attack_particles
     }
     /// The block outline, hurt overlay and glint colours the renderer draws with.

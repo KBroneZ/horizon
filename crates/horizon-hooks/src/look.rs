@@ -137,9 +137,10 @@ mod tests {
         // Seats no other test plays, as the looks are shared.
         crate::engine::set_seat(5);
         assert_eq!(engine::get(), Look::default());
-        let mut look = Look::default();
-        look.legacy_pose = true;
-        set(look);
+        set(Look {
+            legacy_pose: true,
+            ..Look::default()
+        });
         assert!(engine::get().legacy_pose);
         crate::engine::set_seat(4);
         assert_eq!(engine::get(), Look::default());
