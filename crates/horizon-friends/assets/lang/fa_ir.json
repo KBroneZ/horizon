@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "کدهای کوتاه اشتباه بیش از حد بود، بنابراین رله تا اشتراک‌گذاری دوباره خاموش است. دوستان هنوز می‌توانند با کد کامل بپیوندند.",
   "horizon.friends.code_ready": "کد دعوت شما آماده است: منوی بازی، بازی با دوستان. کپی کنید و برای دوستانتان ارسال کنید.",
   "horizon.friends.share_failed": "نمی توان جهان را به اشتراک گذاشت: %s",
-  "horizon.friends.finding_route": "یافتن نحوه ارتباط دوستان با شما…"
+  "horizon.friends.finding_route": "یافتن نحوه ارتباط دوستان با شما…",
+  "horizon.multiplayer.join": "بپیوندید",
+  "horizon.multiplayer.join_friend": "به یک دوست بپیوندید",
+  "horizon.multiplayer.invite_code": "کد دعوت",
+  "horizon.multiplayer.relay": "رله (اختیاری)"
 }

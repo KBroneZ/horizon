@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Re a godoù berr fazius, setu m'eo diweredekaet an treuzkas betek ma rannit en-dro. Ar vignoned a c'hall c'hoazh mont e-barzh gant ar c'hod klok.",
   "horizon.friends.code_ready": "Prest eo ho kod pediñ : Menü ar c'hoari, C'hoari gant mignoned. Eilañ anezhañ ha kas anezhañ d'ho mignoned.",
   "horizon.friends.share_failed": "N'hall ket rannañ ar bed : %s",
-  "horizon.friends.finding_route": "Kavout penaos e c'hall mignoned tizhout ac'hanoc'h..."
+  "horizon.friends.finding_route": "Kavout penaos e c'hall mignoned tizhout ac'hanoc'h...",
+  "horizon.multiplayer.join": "Kemer perzh",
+  "horizon.multiplayer.join_friend": "Kemer perzh en ur mignon",
+  "horizon.multiplayer.invite_code": "Kod pediñ",
+  "horizon.multiplayer.relay": "Treuzkas (dibar)"
 }

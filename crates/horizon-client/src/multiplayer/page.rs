@@ -383,19 +383,16 @@ mod tests {
             "test.join"
         }
         fn title(&self) -> &'static str {
-            "horizon.multiplayer.join_friend"
+            "test.page.join_friend"
         }
         fn place(&self) -> Place {
             Place::Title
         }
         fn rows(&self, rows: &mut Vec<Row>) {
             let code = self.code.lock().unwrap().clone();
-            rows.push(Row::field("horizon.multiplayer.invite_code", code.clone()).max(8));
-            rows.push(Row::field(
-                "horizon.multiplayer.relay",
-                "relay.example:25599",
-            ));
-            rows.push(Row::button("horizon.multiplayer.join").active(code.len() >= 4));
+            rows.push(Row::field("test.page.invite_code", code.clone()).max(8));
+            rows.push(Row::field("test.page.relay", "relay.example:25599"));
+            rows.push(Row::button("test.page.join").active(code.len() >= 4));
         }
         fn act(&self, row: usize, act: Act) {
             if let (0, Act::Edit(text)) = (row, &act) {

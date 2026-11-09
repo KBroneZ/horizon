@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "பல தவறான சுருக்கக் குறியீடுகள், எனவே மீண்டும் பகிரும் வரை ரிலே ஆஃப். நண்பர்கள் இன்னும் முழுக் குறியீட்டுடன் சேரலாம்.",
   "horizon.friends.code_ready": "உங்கள் அழைப்புக் குறியீடு தயாராக உள்ளது: கேம் மெனு, நண்பர்களுடன் விளையாடுங்கள். அதை நகலெடுத்து உங்கள் நண்பர்களுக்கு அனுப்புங்கள்.",
   "horizon.friends.share_failed": "உலகைப் பகிர முடியவில்லை: %s",
-  "horizon.friends.finding_route": "நண்பர்கள் உங்களை எவ்வாறு அணுகலாம் என்பதைக் கண்டறிதல்…"
+  "horizon.friends.finding_route": "நண்பர்கள் உங்களை எவ்வாறு அணுகலாம் என்பதைக் கண்டறிதல்…",
+  "horizon.multiplayer.join": "சேருங்கள்",
+  "horizon.multiplayer.join_friend": "ஒரு நண்பருடன் சேருங்கள்",
+  "horizon.multiplayer.invite_code": "அழைப்பு குறியீடு",
+  "horizon.multiplayer.relay": "ரிலே (விரும்பினால்)"
 }

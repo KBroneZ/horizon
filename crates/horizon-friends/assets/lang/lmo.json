@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Trope codes curt sbajaa, donca el relè l'è spent fin quand te condividet ancamò. I amis pœden entrà ancamò cunt el codes cumplet.",
   "horizon.friends.code_ready": "El tò codes de invito l’è pront: Menu del giœugh, Giœugh cunt i amì. Copia-la e manda-la ai tò amis.",
   "horizon.friends.share_failed": "Pudeva minga cundivider el mund: %s",
-  "horizon.friends.finding_route": "Truvà cuma i amis pœden rivà a ti..."
+  "horizon.friends.finding_route": "Truvà cuma i amis pœden rivà a ti...",
+  "horizon.multiplayer.join": "Partecipa",
+  "horizon.multiplayer.join_friend": "Unis-te a un amig",
+  "horizon.multiplayer.invite_code": "Codex de l'invito",
+  "horizon.multiplayer.relay": "Relè (facultatif)"
 }

@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Элбэх сыыһа кылгас код, ол иһин relay эмиэ үллэстэриҥ саҕана уһуллубут. Доҕоттор толору кодонан киириэхтэрин сөп.",
   "horizon.friends.code_ready": "Ыҥырыы кодуҥ бэлэм: Оонньуу менюта, Доҕотторгун кытта оонньоо. Ону көһөрөн баран доҕотторгор ыыт.",
   "horizon.friends.share_failed": "Аан дойдуну үллэстэр кыаҕым суох: %s",
-  "horizon.friends.finding_route": "Доҕоттор эйиэхэ хайдах тиийиэхтэрин сөбүн булуу..."
+  "horizon.friends.finding_route": "Доҕоттор эйиэхэ хайдах тиийиэхтэрин сөбүн булуу...",
+  "horizon.multiplayer.join": "Кыттыс",
+  "horizon.multiplayer.join_friend": "Доҕоргор холбос",
+  "horizon.multiplayer.invite_code": "Ыҥырыы куода",
+  "horizon.multiplayer.relay": "Реле (опциональнай)"
 }

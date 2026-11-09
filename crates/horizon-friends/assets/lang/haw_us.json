@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Nui loa nā code pōkole hewa, no laila ua paʻa ka relay a hiki i kou kaʻana hou ʻana. Hiki nō i nā hoaaloha ke hui me ka code piha.",
   "horizon.friends.code_ready": "Ua mākaukau kāu code kono: Game Menu, Play with Friends. E kope a hoʻouna aku i kāu mau hoaaloha.",
   "horizon.friends.share_failed": "ʻAʻole hiki ke kaʻana like i ka honua: %s",
-  "horizon.friends.finding_route": "Ke ʻimi nei pehea e hiki ai i nā hoaaloha ke loaʻa iā ʻoe…"
+  "horizon.friends.finding_route": "Ke ʻimi nei pehea e hiki ai i nā hoaaloha ke loaʻa iā ʻoe…",
+  "horizon.multiplayer.join": "Hui",
+  "horizon.multiplayer.join_friend": "E hui me kahi Hoa",
+  "horizon.multiplayer.invite_code": "Code kono",
+  "horizon.multiplayer.relay": "Relay (koho)"
 }

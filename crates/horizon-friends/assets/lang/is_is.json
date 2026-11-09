@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Of margir rangir stuttkóðar, svo gengið er slökkt þar til þú deilir aftur. Vinir geta samt tengst með fullum kóða.",
   "horizon.friends.code_ready": "Boðskóðinn þinn er tilbúinn: Leikjavalmynd, Spilaðu með vinum. Afritaðu það og sendu það til vina þinna.",
   "horizon.friends.share_failed": "Gat ekki deilt heiminum: %s",
-  "horizon.friends.finding_route": "Að finna hvernig vinir geta náð í þig..."
+  "horizon.friends.finding_route": "Að finna hvernig vinir geta náð í þig...",
+  "horizon.multiplayer.join": "Vertu með",
+  "horizon.multiplayer.join_friend": "Vertu með í vini",
+  "horizon.multiplayer.invite_code": "Boðskóði",
+  "horizon.multiplayer.relay": "Relay (valfrjálst)"
 }

@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Твърде много грешни кратки кодове, затова релето е изключено, докато не споделите отново. Приятелите все още могат да се присъединят с пълния код.",
   "horizon.friends.code_ready": "Вашият код за покана е готов: Меню за игри, Играйте с приятели. Копирайте го и го изпратете на приятелите си.",
   "horizon.friends.share_failed": "Не можах да споделя света: %s",
-  "horizon.friends.finding_route": "Търся как приятелите могат да се свържат с вас..."
+  "horizon.friends.finding_route": "Търся как приятелите могат да се свържат с вас...",
+  "horizon.multiplayer.join": "Присъединете се",
+  "horizon.multiplayer.join_friend": "Присъединете се към приятел",
+  "horizon.multiplayer.invite_code": "Код за покана",
+  "horizon.multiplayer.relay": "Реле (по избор)"
 }

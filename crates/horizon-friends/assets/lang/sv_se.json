@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "För många felaktiga kortkoder, så reläet är avstängt tills du delar igen. Vänner kan fortfarande gå med med den fullständiga koden.",
   "horizon.friends.code_ready": "Din inbjudningskod är klar: Spelmeny, Spela med vänner. Kopiera den och skicka den till dina vänner.",
   "horizon.friends.share_failed": "Kunde inte dela världen: %s",
-  "horizon.friends.finding_route": "Hitta hur vänner kan nå dig..."
+  "horizon.friends.finding_route": "Hitta hur vänner kan nå dig...",
+  "horizon.multiplayer.join": "Gå med",
+  "horizon.multiplayer.join_friend": "Gå med i en vän",
+  "horizon.multiplayer.invite_code": "Inbjudningskod",
+  "horizon.multiplayer.relay": "Relä (valfritt)"
 }

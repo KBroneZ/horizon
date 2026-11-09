@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Tròp de còdes corts erronèus, doncas lo relais es desactivat fins que partejatz de nòu. Los amics pòdon encara rejónher amb lo còde complet.",
   "horizon.friends.code_ready": "Vòstre còde d'invitacion es prèst: Menut de jòc, Jogar amb d'amics. Copiatz-lo e mandatz-lo a vòstres amics.",
   "horizon.friends.share_failed": "Poguèt pas partejar lo mond: %s",
-  "horizon.friends.finding_route": "Trobar cossí los amics pòdon vos contactar..."
+  "horizon.friends.finding_route": "Trobar cossí los amics pòdon vos contactar...",
+  "horizon.multiplayer.join": "Inscrivètz-vos",
+  "horizon.multiplayer.join_friend": "Rejonhètz un amic",
+  "horizon.multiplayer.invite_code": "Còde d'invitacion",
+  "horizon.multiplayer.relay": "Relè (facultatiu)"
 }

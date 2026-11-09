@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Too many wrong short codes, so the relay is off until you share again. Friends can still join with the full code.",
   "horizon.friends.code_ready": "Your invite code is ready: Game Menu, Play with Friends. Copy it and send it to your friends.",
   "horizon.friends.share_failed": "Couldn't share the world: %s",
-  "horizon.friends.finding_route": "Finding how friends can reach you…"
+  "horizon.friends.finding_route": "Finding how friends can reach you…",
+  "horizon.multiplayer.join": "Join",
+  "horizon.multiplayer.join_friend": "Join a Friend",
+  "horizon.multiplayer.invite_code": "Invite Code",
+  "horizon.multiplayer.relay": "Relay (optional)"
 }

@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Πολλοί λάθος σύντομοι κωδικοί, οπότε το ρελέ είναι κλειστό μέχρι να μοιραστείτε ξανά. Οι φίλοι μπορούν ακόμη να συνδεθούν με τον πλήρη κωδικό.",
   "horizon.friends.code_ready": "Ο κωδικός πρόσκλησής σας είναι έτοιμος: Μενού παιχνιδιού, Παίξτε με φίλους. Αντιγράψτε το και στείλτε το στους φίλους σας.",
   "horizon.friends.share_failed": "Δεν μπορούσα να μοιραστώ τον κόσμο: %s",
-  "horizon.friends.finding_route": "Βρείτε πώς μπορούν να σας φτάσουν οι φίλοι…"
+  "horizon.friends.finding_route": "Βρείτε πώς μπορούν να σας φτάσουν οι φίλοι…",
+  "horizon.multiplayer.join": "Εγγραφείτε",
+  "horizon.multiplayer.join_friend": "Γίνετε μέλος ενός φίλου",
+  "horizon.multiplayer.invite_code": "Κωδικός πρόσκλησης",
+  "horizon.multiplayer.relay": "Ρελέ (προαιρετικό)"
 }

@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Tro da malĝustaj mallongaj kodoj, do la relajso estas malŝaltita ĝis vi denove kundividos. Amikoj ankoraŭ povas aliĝi per la plena kodo.",
   "horizon.friends.code_ready": "Via invitkodo estas preta: Luda Menuo, Ludu kun Amikoj. Kopiu ĝin kaj sendu ĝin al viaj amikoj.",
   "horizon.friends.share_failed": "Ne povis dividi la mondon: %s",
-  "horizon.friends.finding_route": "Trovi kiel amikoj povas atingi vin..."
+  "horizon.friends.finding_route": "Trovi kiel amikoj povas atingi vin...",
+  "horizon.multiplayer.join": "Aliĝu",
+  "horizon.multiplayer.join_friend": "Aliĝu al Amiko",
+  "horizon.multiplayer.invite_code": "Inviti Kodon",
+  "horizon.multiplayer.relay": "Relajso (laŭvola)"
 }

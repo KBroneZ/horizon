@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "ತುಂಬಾ ತಪ್ಪು ಶಾರ್ಟ್ ಕೋಡ್‌ಗಳು, ಆದ್ದರಿಂದ ನೀವು ಮತ್ತೆ ಹಂಚಿಕೊಳ್ಳುವವರೆಗೆ ರಿಲೇ ಆಫ್ ಆಗಿದೆ. ಸ್ನೇಹಿತರು ಪೂರ್ಣ ಕೋಡ್‌ನಿಂದ ಇನ್ನೂ ಸೇರಬಹುದು.",
   "horizon.friends.code_ready": "ನಿಮ್ಮ ಆಹ್ವಾನ ಕೋಡ್ ಸಿದ್ಧವಾಗಿದೆ: ಗೇಮ್ ಮೆನು, ಸ್ನೇಹಿತರೊಂದಿಗೆ ಆಟವಾಡಿ. ಅದನ್ನು ನಕಲಿಸಿ ಮತ್ತು ನಿಮ್ಮ ಸ್ನೇಹಿತರಿಗೆ ಕಳುಹಿಸಿ.",
   "horizon.friends.share_failed": "ಜಗತ್ತನ್ನು ಹಂಚಿಕೊಳ್ಳಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ: %s",
-  "horizon.friends.finding_route": "ಸ್ನೇಹಿತರು ನಿಮ್ಮನ್ನು ಹೇಗೆ ತಲುಪಬಹುದು ಎಂಬುದನ್ನು ಹುಡುಕಲಾಗುತ್ತಿದೆ..."
+  "horizon.friends.finding_route": "ಸ್ನೇಹಿತರು ನಿಮ್ಮನ್ನು ಹೇಗೆ ತಲುಪಬಹುದು ಎಂಬುದನ್ನು ಹುಡುಕಲಾಗುತ್ತಿದೆ...",
+  "horizon.multiplayer.join": "ಸೇರಿಕೊಳ್ಳಿ",
+  "horizon.multiplayer.join_friend": "ಸ್ನೇಹಿತನನ್ನು ಸೇರಿ",
+  "horizon.multiplayer.invite_code": "ಆಹ್ವಾನ ಕೋಡ್",
+  "horizon.multiplayer.relay": "ರಿಲೇ (ಐಚ್ಛಿಕ)"
 }

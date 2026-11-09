@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "بہت زیادہ غلط شارٹ کوڈز، اس لیے دوبارہ شیئر کرنے تک رلے بند ہے۔ دوست اب بھی مکمل کوڈ سے شامل ہو سکتے ہیں۔",
   "horizon.friends.code_ready": "آپ کا دعوت نامہ کوڈ تیار ہے: گیم مینو، پلے ود فرینڈز۔ اسے کاپی کریں اور اپنے دوستوں کو بھیجیں۔",
   "horizon.friends.share_failed": "دنیا شیئر نہیں کی جا سکی: %s",
-  "horizon.friends.finding_route": "تلاش کر رہے ہیں کہ دوست آپ تک کیسے پہنچ سکتے ہیں…"
+  "horizon.friends.finding_route": "تلاش کر رہے ہیں کہ دوست آپ تک کیسے پہنچ سکتے ہیں…",
+  "horizon.multiplayer.join": "شامل ہوں",
+  "horizon.multiplayer.join_friend": "کسی دوست کے ساتھ جڑیں",
+  "horizon.multiplayer.invite_code": "دعوت نامہ کوڈ",
+  "horizon.multiplayer.relay": "رلے (اختیاری)"
 }

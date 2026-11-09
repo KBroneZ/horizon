@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Te folle ferkearde koadekoarten, dus de estafette stiet út oant jo wer diele. Freonen kinne noch altyd mei de folsleine koade meidwaan.",
   "horizon.friends.code_ready": "Jo útnoegingskoade is klear: Game Menu, Boartsje mei freonen. Kopiearje it en stjoer it nei jo freonen.",
   "horizon.friends.share_failed": "Koe de wrâld net diele: %s",
-  "horizon.friends.finding_route": "Fyn hoe't freonen jo kinne berikke ..."
+  "horizon.friends.finding_route": "Fyn hoe't freonen jo kinne berikke ...",
+  "horizon.multiplayer.join": "Meidwaan",
+  "horizon.multiplayer.join_friend": "Doch mei oan in freon",
+  "horizon.multiplayer.invite_code": "Koade útnoegje",
+  "horizon.multiplayer.relay": "Relais (opsjoneel)"
 }

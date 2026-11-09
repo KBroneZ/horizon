@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Koodu mkpụmkpụ na-ezighi ezi karịrị oke, ya mere relay agbanyụrụ ruo mgbe i ga-ekerịta ọzọ. Ndị enyi ka nwere ike iso na koodu zuru oke.",
   "horizon.friends.code_ready": "Koodu ịkpọ oku gị adịla njikere: NchNhr Egwuregwu, Soro ndị enyi gwuo egwu. Detuo ya ma ziga ya ndị enyi gị.",
   "horizon.friends.share_failed": "Enweghị ike ịkekọrịta ụwa: %s",
-  "horizon.friends.finding_route": "Ịchọta ka ndị enyi ga-esi nweta gị…"
+  "horizon.friends.finding_route": "Ịchọta ka ndị enyi ga-esi nweta gị…",
+  "horizon.multiplayer.join": "Soro",
+  "horizon.multiplayer.join_friend": "Soro enyi",
+  "horizon.multiplayer.invite_code": "Koodu ịkpọ oku",
+  "horizon.multiplayer.relay": "Ntugharị (nhọrọ)"
 }

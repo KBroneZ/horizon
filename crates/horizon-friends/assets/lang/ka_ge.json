@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "ძალიან ბევრი არასწორი მოკლე კოდი, ამიტომ რელე გამორთულია, სანამ ხელახლა არ გააზიარებთ. მეგობრებს მაინც შეუძლიათ შეერთება სრული კოდით.",
   "horizon.friends.code_ready": "თქვენი მოწვევის კოდი მზად არის: თამაშის მენიუ, თამაში მეგობრებთან ერთად. დააკოპირეთ და გაუგზავნეთ თქვენს მეგობრებს.",
   "horizon.friends.share_failed": "ვერ ვიზიარებ სამყაროს: %s",
-  "horizon.friends.finding_route": "იპოვნეთ როგორ დაგიკავშირდნენ მეგობრები…"
+  "horizon.friends.finding_route": "იპოვნეთ როგორ დაგიკავშირდნენ მეგობრები…",
+  "horizon.multiplayer.join": "შეუერთდი",
+  "horizon.multiplayer.join_friend": "შეუერთდი მეგობარს",
+  "horizon.multiplayer.invite_code": "მოწვევის კოდი",
+  "horizon.multiplayer.relay": "რელე (სურვილისამებრ)"
 }

@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Prea multe coduri scurte greșite, așa că releul este oprit până când distribui din nou. Prietenii se pot alătura în continuare cu codul complet.",
   "horizon.friends.code_ready": "Codul dvs. de invitație este gata: Meniu joc, Joacă cu prietenii. Copiați-l și trimiteți-l prietenilor dvs.",
   "horizon.friends.share_failed": "Nu am putut împărtăși lumea: %s",
-  "horizon.friends.finding_route": "Aflați cum prietenii vă pot contacta..."
+  "horizon.friends.finding_route": "Aflați cum prietenii vă pot contacta...",
+  "horizon.multiplayer.join": "Alăturați-vă",
+  "horizon.multiplayer.join_friend": "Alăturați-vă unui prieten",
+  "horizon.multiplayer.invite_code": "Cod de invitație",
+  "horizon.multiplayer.relay": "releu (optional)"
 }

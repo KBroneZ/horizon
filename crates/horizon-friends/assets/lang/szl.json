@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Za moc złych krōtkich kodōw, tōż przekaźnik je wyłōnczōny, dopōki niy udostympnisz nazod. Kamraci mogōm sie durch prziłōnczyć pełnym kodym.",
   "horizon.friends.code_ready": "Kod zaproszynio je gotowy: Menu Grōw, Gra z Kamratami. Skopiuj ja i wysyłaj do swojich kamratōw.",
   "horizon.friends.share_failed": "Niy mōg sie dzielić światym: %s",
-  "horizon.friends.finding_route": "Znojdowanie, jak kamraci mogōm sie z Tobōm dotrzeć..."
+  "horizon.friends.finding_route": "Znojdowanie, jak kamraci mogōm sie z Tobōm dotrzeć...",
+  "horizon.multiplayer.join": "Prziłōncz sie",
+  "horizon.multiplayer.join_friend": "Prziłōncz sie do Kamrata",
+  "horizon.multiplayer.invite_code": "Kod zaproszynio",
+  "horizon.multiplayer.relay": "Przekaźnik (opcjōnalnie)"
 }

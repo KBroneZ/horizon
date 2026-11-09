@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "An iomarca cóid ghearra míchearta, mar sin tá an sealaíocht as go dtí go roinnfidh tú arís. Is féidir le cairde teacht isteach fós leis an gcód iomlán.",
   "horizon.friends.code_ready": "Tá do chód cuireadh réidh: Roghchlár Cluiche, Spraoi le Cairde. Cóipeáil é agus seol chuig do chairde é.",
   "horizon.friends.share_failed": "Níorbh fhéidir an domhan a roinnt: %s",
-  "horizon.friends.finding_route": "Ag fáil amach conas is féidir le cairde dul i dteagmháil leat…"
+  "horizon.friends.finding_route": "Ag fáil amach conas is féidir le cairde dul i dteagmháil leat…",
+  "horizon.multiplayer.join": "Bígí",
+  "horizon.multiplayer.join_friend": "Bígí le Cara",
+  "horizon.multiplayer.invite_code": "Cód Cuireadh",
+  "horizon.multiplayer.relay": "Sealaíocht (roghnach)"
 }

@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Te veel verkeerde shortcodes, dus het relais staat uit tot je opnieuw deelt. Vrienden kunnen nog steeds met de volledige code meedoen.",
   "horizon.friends.code_ready": "Je uitnodigingscode is klaar: Gamemenu, Spelen met vrienden. Kopieer het en stuur het naar je vrienden.",
   "horizon.friends.share_failed": "Kon de wereld niet delen: %s",
-  "horizon.friends.finding_route": "Ontdek hoe vrienden u kunnen bereiken..."
+  "horizon.friends.finding_route": "Ontdek hoe vrienden u kunnen bereiken...",
+  "horizon.multiplayer.join": "Doe mee",
+  "horizon.multiplayer.join_friend": "Sluit je aan bij een vriend",
+  "horizon.multiplayer.invite_code": "Uitnodigingscode",
+  "horizon.multiplayer.relay": "relais (optioneel)"
 }

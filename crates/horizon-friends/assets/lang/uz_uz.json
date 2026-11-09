@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Juda ko'p noto'g'ri qisqa kod kiritildi, shuning uchun qayta ulashmaguningizcha rele o'chirilgan. Do'stlar hali ham to'liq kod bilan qo'shila oladi.",
   "horizon.friends.code_ready": "Taklif kodingiz tayyor: Oʻyin menyusi, Doʻstlar bilan oʻynang. Uni nusxalang va do'stlaringizga yuboring.",
   "horizon.friends.share_failed": "Dunyoni ulashib boʻlmadi: %s",
-  "horizon.friends.finding_route": "Do‘stlar siz bilan qanday bog‘lanishi mumkinligi aniqlanmoqda…"
+  "horizon.friends.finding_route": "Do‘stlar siz bilan qanday bog‘lanishi mumkinligi aniqlanmoqda…",
+  "horizon.multiplayer.join": "Qo'shilish",
+  "horizon.multiplayer.join_friend": "Do'stga qo'shiling",
+  "horizon.multiplayer.invite_code": "Taklif kodi",
+  "horizon.multiplayer.relay": "Rele (ixtiyoriy)"
 }

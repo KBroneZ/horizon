@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Troscia codici curti sbaliài, quindi el relè el resta spento fin che no te condividi da novo. I amighi i pol oncora entrar col codice conpleto.",
   "horizon.friends.code_ready": "El vostro codice de invito xe pronto: Menu del gioco, Gioco coi amici. Copiatelo e mandatelo ai tuoi amici.",
   "horizon.friends.share_failed": "No se podeva condividere el mondo: %s",
-  "horizon.friends.finding_route": "Trovando come che i amighi i pol rivar a ti…"
+  "horizon.friends.finding_route": "Trovando come che i amighi i pol rivar a ti…",
+  "horizon.multiplayer.join": "Entra",
+  "horizon.multiplayer.join_friend": "Entra a un amigo",
+  "horizon.multiplayer.invite_code": "Codice de invito",
+  "horizon.multiplayer.relay": "Relè (opsionałe)"
 }

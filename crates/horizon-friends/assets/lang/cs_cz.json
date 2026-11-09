@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Příliš mnoho špatných krátkých kódů, takže relé je vypnuté, dokud nebudete sdílet znovu. Přátelé se stále mohou připojit s plným kódem.",
   "horizon.friends.code_ready": "Váš zvací kód je připraven: Herní menu, Hrajte s přáteli. Zkopírujte jej a pošlete svým přátelům.",
   "horizon.friends.share_failed": "Nepodařilo se sdílet svět: %s",
-  "horizon.friends.finding_route": "Zjištění, jak vás mohou přátelé kontaktovat…"
+  "horizon.friends.finding_route": "Zjištění, jak vás mohou přátelé kontaktovat…",
+  "horizon.multiplayer.join": "Připojte se",
+  "horizon.multiplayer.join_friend": "Přidejte se k příteli",
+  "horizon.multiplayer.invite_code": "Kód pozvánky",
+  "horizon.multiplayer.relay": "relé (volitelné)"
 }

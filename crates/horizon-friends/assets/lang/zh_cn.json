@@ -15,5 +15,9 @@
   "horizon.friends.wrong_code": "有人尝试了错误的代码。",
   "horizon.friends.code_ready": "你的邀请码已就绪：游戏菜单 → 与好友一起玩。复制后发给好友。",
   "horizon.friends.share_failed": "无法共享世界：%s",
-  "horizon.friends.finding_route": "正在寻找好友连接你的方式…"
+  "horizon.friends.finding_route": "正在寻找好友连接你的方式…",
+  "horizon.multiplayer.join": "加入",
+  "horizon.multiplayer.join_friend": "加入好友",
+  "horizon.multiplayer.invite_code": "邀请码",
+  "horizon.multiplayer.relay": "中继（可选）"
 }

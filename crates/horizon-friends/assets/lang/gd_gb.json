@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Cus de chòdan goirid ceàrr, agus mar sin tha an t-sealaidheachd dheth gus an roinn thu a-rithist. Faodaidh caraidean a dhol còmhla leis a' chòd slàn fhathast.",
   "horizon.friends.code_ready": "Tha an còd cuireadh agad deiseil: Clàr Gèam, Cluich le Caraidean. Dèan lethbhreac dheth agus cuir gu do charaidean e.",
   "horizon.friends.share_failed": "Cha b’ urrainn dhuinn an saoghal a cho-roinn: %s",
-  "horizon.friends.finding_route": "Faigh a-mach mar as urrainn do charaidean ruighinn ort…"
+  "horizon.friends.finding_route": "Faigh a-mach mar as urrainn do charaidean ruighinn ort…",
+  "horizon.multiplayer.join": "Thig còmhla",
+  "horizon.multiplayer.join_friend": "Thig còmhla ri Caraid",
+  "horizon.multiplayer.invite_code": "Còd cuireadh",
+  "horizon.multiplayer.relay": "Ath-chraoladh (roghainneil)"
 }

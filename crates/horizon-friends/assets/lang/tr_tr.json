@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Çok fazla yanlış kısa kod denendi, bu yüzden siz yeniden paylaşana kadar aktarıcı kapalı. Arkadaşlar yine de tam kodla katılabilir.",
   "horizon.friends.code_ready": "Davet kodunuz hazır: Oyun Menüsü, Arkadaşlarla Oyna. Kopyalayın ve arkadaşlarınıza gönderin.",
   "horizon.friends.share_failed": "Dünya paylaşılamadı: %s",
-  "horizon.friends.finding_route": "Arkadaşların size nasıl ulaşacağı aranıyor…"
+  "horizon.friends.finding_route": "Arkadaşların size nasıl ulaşacağı aranıyor…",
+  "horizon.multiplayer.join": "Katıl",
+  "horizon.multiplayer.join_friend": "Bir Arkadaşa Katıl",
+  "horizon.multiplayer.invite_code": "Davet Kodu",
+  "horizon.multiplayer.relay": "Aktarıcı (İsteğe Bağlı)"
 }

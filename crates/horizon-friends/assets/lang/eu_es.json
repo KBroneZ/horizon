@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Kode labur oker gehiegi, beraz erreleboa itzalita dago berriro partekatu arte. Lagunek kode osoarekin sartzen jarrai dezakete.",
   "horizon.friends.code_ready": "Zure gonbidapen-kodea prest dago: Jokoen menua, Jolastu lagunekin. Kopiatu eta bidali zure lagunei.",
   "horizon.friends.share_failed": "Ezin izan da mundua partekatu: %s",
-  "horizon.friends.finding_route": "Lagunak zurekin nola irits daitezkeen aurkitzen..."
+  "horizon.friends.finding_route": "Lagunak zurekin nola irits daitezkeen aurkitzen...",
+  "horizon.multiplayer.join": "Sartu",
+  "horizon.multiplayer.join_friend": "Sartu Lagun batekin",
+  "horizon.multiplayer.invite_code": "Gonbidatu kodea",
+  "horizon.multiplayer.relay": "Erreleboa (aukerakoa)"
 }

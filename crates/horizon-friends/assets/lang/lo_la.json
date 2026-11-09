@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "ລະຫັດສັ້ນຜິດຫຼາຍເກີນໄປ, ດັ່ງນັ້ນ relay ຈຶ່ງປິດຈົນກວ່າທ່ານຈະແບ່ງປັນອີກຄັ້ງ. ໝູ່ເພື່ອນຍັງສາມາດເຂົ້າຮ່ວມດ້ວຍລະຫັດເຕັມໄດ້.",
   "horizon.friends.code_ready": "ລະຫັດເຊີນຂອງທ່ານພ້ອມແລ້ວ: ເມນູເກມ, ຫຼິ້ນກັບໝູ່. ຄັດລອກມັນແລະສົ່ງໃຫ້ຫມູ່ເພື່ອນຂອງທ່ານ.",
   "horizon.friends.share_failed": "ບໍ່ສາມາດແບ່ງປັນໂລກໄດ້: %s",
-  "horizon.friends.finding_route": "ຊອກຫາວິທີທີ່ໝູ່ສາມາດເຂົ້າຫາທ່ານ..."
+  "horizon.friends.finding_route": "ຊອກຫາວິທີທີ່ໝູ່ສາມາດເຂົ້າຫາທ່ານ...",
+  "horizon.multiplayer.join": "ເຂົ້າຮ່ວມ",
+  "horizon.multiplayer.join_friend": "ເຂົ້າຮ່ວມເພື່ອນ",
+  "horizon.multiplayer.invite_code": "ລະຫັດເຊີນ",
+  "horizon.multiplayer.relay": "Relay (ທາງເລືອກ)"
 }

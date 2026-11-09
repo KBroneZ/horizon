@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Demasiados códigos curtos errados, por isso o relay está desligado até partilhares novamente. Os amigos ainda podem entrar com o código completo.",
   "horizon.friends.code_ready": "O teu código de convite está pronto: Menu do Jogo, Jogar com Amigos. Copia-o e envia-o aos teus amigos.",
   "horizon.friends.share_failed": "Não foi possível partilhar o mundo: %s",
-  "horizon.friends.finding_route": "A determinar como os amigos podem aceder..."
+  "horizon.friends.finding_route": "A determinar como os amigos podem aceder...",
+  "horizon.multiplayer.join": "Entrar",
+  "horizon.multiplayer.join_friend": "Juntar-se a um amigo",
+  "horizon.multiplayer.invite_code": "Código de convite",
+  "horizon.multiplayer.relay": "Relay (opcional)"
 }

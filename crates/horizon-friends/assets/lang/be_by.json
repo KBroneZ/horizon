@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Занадта шмат няправільных кароткіх кодаў, таму рэле выключана, пакуль вы не падзеліцеся зноў. Сябры ўсё яшчэ могуць далучыцца з поўным кодам.",
   "horizon.friends.code_ready": "Ваш код запрашэння гатовы: меню гульні, гульня з сябрамі. Скапіруйце яго і адпраўце сваім сябрам.",
   "horizon.friends.share_failed": "Не атрымалася падзяліцца светам: %s",
-  "horizon.friends.finding_route": "Пошук, як сябры могуць звязацца з вамі..."
+  "horizon.friends.finding_route": "Пошук, як сябры могуць звязацца з вамі...",
+  "horizon.multiplayer.join": "Далучайцеся",
+  "horizon.multiplayer.join_friend": "Далучайцеся да сяброў",
+  "horizon.multiplayer.invite_code": "Код запрашэння",
+  "horizon.multiplayer.relay": "Рэле (неабавязкова)"
 }

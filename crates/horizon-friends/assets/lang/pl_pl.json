@@ -15,5 +15,9 @@
   "horizon.friends.wrong_code": "Ktoś wpisał zły kod.",
   "horizon.friends.code_ready": "Twój kod zaproszenia jest gotowy: Menu gry, Graj ze znajomymi. Skopiuj go i wyślij znajomym.",
   "horizon.friends.share_failed": "Nie udało się udostępnić świata: %s",
-  "horizon.friends.finding_route": "Sprawdzanie, jak znajomi mogą się z tobą połączyć…"
+  "horizon.friends.finding_route": "Sprawdzanie, jak znajomi mogą się z tobą połączyć…",
+  "horizon.multiplayer.join": "Dołącz",
+  "horizon.multiplayer.join_friend": "Dołącz do znajomego",
+  "horizon.multiplayer.invite_code": "Kod zaproszenia",
+  "horizon.multiplayer.relay": "Przekaźnik (opcjonalnie)"
 }

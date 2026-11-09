@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Дөрөҫ булмаған ҡыҫҡа кодтар бик күп булды, шуға күрә ҡабат бүлешкәнгә тиклем реле һүндерелгән. Дуҫтар тулы код менән килеүен дауам итә ала.",
   "horizon.friends.code_ready": "Һеҙҙең саҡырыу коды әҙер: Уйын Менюһы, Дуҫтар менән уйнау. Күсереп яҙып, дуҫтарығыҙға ебәрегеҙ.",
   "horizon.friends.share_failed": "Донъяны бүлешә алманым: %s",
-  "horizon.friends.finding_route": "Һеҙгә дуҫтар нисек барып етә алыуын табыу..."
+  "horizon.friends.finding_route": "Һеҙгә дуҫтар нисек барып етә алыуын табыу...",
+  "horizon.multiplayer.join": "Ҡушылыу",
+  "horizon.multiplayer.join_friend": "Дуҫҡа ҡушыл",
+  "horizon.multiplayer.invite_code": "Саҡырыу коды",
+  "horizon.multiplayer.relay": "Реле (теләк буйынса)"
 }

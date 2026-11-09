@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Ze vill falsch Kuerzcoden, dofir ass de Relais aus, bis Dir nees deelt. Frënn kënnen nach ëmmer mam vollen Code bäitrieden.",
   "horizon.friends.code_ready": "Ären Invitatiounscode ass prett: Spillmenü, Spill mat Frënn. Kopéiert et a schéckt et un Är Frënn.",
   "horizon.friends.share_failed": "Konnt d'Welt net deelen: %s",
-  "horizon.friends.finding_route": "Fannt wéi Frënn Iech erreechen ..."
+  "horizon.friends.finding_route": "Fannt wéi Frënn Iech erreechen ...",
+  "horizon.multiplayer.join": "Maacht mat",
+  "horizon.multiplayer.join_friend": "Maacht mat engem Frënd",
+  "horizon.multiplayer.invite_code": "Invitéieren Code",
+  "horizon.multiplayer.relay": "Relais (optional)"
 }

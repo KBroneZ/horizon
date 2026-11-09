@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Liian monta väärää lyhytkoodia, joten rele on pois päältä, kunnes jaat uudelleen. Ystävät voivat yhä liittyä täydellä koodilla.",
   "horizon.friends.code_ready": "Kutsukoodisi on valmis: Pelivalikko, Pelaa ystävien kanssa. Kopioi se ja lähetä se ystävillesi.",
   "horizon.friends.share_failed": "Ei voinut jakaa maailmaa: %s",
-  "horizon.friends.finding_route": "Selvitetään, kuinka ystävät voivat tavoittaa sinut…"
+  "horizon.friends.finding_route": "Selvitetään, kuinka ystävät voivat tavoittaa sinut…",
+  "horizon.multiplayer.join": "Liity",
+  "horizon.multiplayer.join_friend": "Liity ystäväksi",
+  "horizon.multiplayer.invite_code": "Kutsukoodi",
+  "horizon.multiplayer.relay": "Rele (valinnainen)"
 }

@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Ытла нумай тӗрӗс мар кӗске код, ҫавӑнпа реле эсир тепӗр хут пайласан ҫеҫ ӗҫлӗ. Тусем тулли кодпа кӗме пултараҫҫӗ.",
   "horizon.friends.code_ready": "Сирӗн чӗнӳ кодӗ хатӗр: Вӑйӑ меню, Туссемпе выля. Ӑна копилесе юлташсене ярса парӑр.",
   "horizon.friends.share_failed": "Тӗнчене пайлаймарӑм: %s",
-  "horizon.friends.finding_route": "Юлташсем сирӗн пата мӗнле ҫитме пултарнине тупасси..."
+  "horizon.friends.finding_route": "Юлташсем сирӗн пата мӗнле ҫитме пултарнине тупасси...",
+  "horizon.multiplayer.join": "Пӗрлешӗр",
+  "horizon.multiplayer.join_friend": "Тус ҫумне хутшӑн",
+  "horizon.multiplayer.invite_code": "Йыхрав кодӗ",
+  "horizon.multiplayer.relay": "Реле (опционально)"
 }

@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "צו פֿיל פֿאַלשע קורץ־קאָדן, דערפֿאַר איז דער רעלעי אַוועק ביז דו טיילסט ווידער. פֿרײַנד קענען זיך נאָך באַטייליקן מיט דעם פֿולן קאָד.",
   "horizon.friends.code_ready": "דיין פאַרבעטונג קאָד איז גרייט: שפּיל מעניו, שפּיל מיט פרענדז. קאָפּי עס און שיקן עס צו דיין פרענדז.",
   "horizon.friends.share_failed": "קען נישט טיילן די וועלט: %s",
-  "horizon.friends.finding_route": "געפֿינען ווי פרענדז קענען דערגרייכן איר ..."
+  "horizon.friends.finding_route": "געפֿינען ווי פרענדז קענען דערגרייכן איר ...",
+  "horizon.multiplayer.join": "פאַרבינדן",
+  "horizon.multiplayer.join_friend": "פאַרבינדן אַ פרייַנד",
+  "horizon.multiplayer.invite_code": "לאַדן קאָד",
+  "horizon.multiplayer.relay": "רעלע (אַפּשאַנאַל)"
 }

@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Demasiados códigos curtos incorrectos, polo que o relé está desactivado ata que volvas compartir. Os amigos aínda poden unirse co código completo.",
   "horizon.friends.code_ready": "O teu código de invitación está listo: Menú Xogo, Xoga cos amigos. Cópiao e envíao aos teus amigos.",
   "horizon.friends.share_failed": "Non se puido compartir o mundo: %s",
-  "horizon.friends.finding_route": "Buscando como os amigos poden contactar contigo..."
+  "horizon.friends.finding_route": "Buscando como os amigos poden contactar contigo...",
+  "horizon.multiplayer.join": "Únete",
+  "horizon.multiplayer.join_friend": "Únete a un amigo",
+  "horizon.multiplayer.invite_code": "Código de invitación",
+  "horizon.multiplayer.relay": "Relé (opcional)"
 }

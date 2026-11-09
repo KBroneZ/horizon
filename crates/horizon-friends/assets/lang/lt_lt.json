@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Per daug neteisingų trumpųjų kodų, todėl relė išjungta, kol vėl bendrinsite. Draugai vis tiek gali prisijungti su visu kodu.",
   "horizon.friends.code_ready": "Jūsų kvietimo kodas paruoštas: žaidimų meniu, žaiskite su draugais. Nukopijuokite ir nusiųskite draugams.",
   "horizon.friends.share_failed": "Nepavyko pasidalinti pasauliu: %s",
-  "horizon.friends.finding_route": "Sužinokite, kaip draugai gali su jumis susisiekti…"
+  "horizon.friends.finding_route": "Sužinokite, kaip draugai gali su jumis susisiekti…",
+  "horizon.multiplayer.join": "Prisijunk",
+  "horizon.multiplayer.join_friend": "Prisijunk prie draugo",
+  "horizon.multiplayer.invite_code": "Kvietimo kodas",
+  "horizon.multiplayer.relay": "Relė (neprivaloma)"
 }

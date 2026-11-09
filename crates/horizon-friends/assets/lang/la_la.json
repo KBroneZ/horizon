@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Nimis multi codices breves falsi: relay exstinctum donec iterum communices. Amici tamen codice pleno iungere possunt.",
   "horizon.friends.code_ready": "Codicem tuum invitare paratum est: Ludus Menu, lude cum amicis. Effingo eam et mitte amicis tuis.",
   "horizon.friends.share_failed": "Non potuit communicare mundum:%s",
-  "horizon.friends.finding_route": "Invenire quomodo amici ad vos pervenire possunt…"
+  "horizon.friends.finding_route": "Invenire quomodo amici ad vos pervenire possunt…",
+  "horizon.multiplayer.join": "Iunge",
+  "horizon.multiplayer.join_friend": "Iungere amico",
+  "horizon.multiplayer.invite_code": "invitare Code",
+  "horizon.multiplayer.relay": "Nullam (libitum)"
 }

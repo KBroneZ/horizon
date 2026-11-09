@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Te väöl verkierde korte codes, dus de relais steit oet totdat se weer deils. Vrun kinne nog ummer mit de volledige code binnekómme.",
   "horizon.friends.code_ready": "Uw oetnodigingscode is klaor: Spelmenu, Speel mit vrun. Kopieer ‘t en sjik ‘t nao dien vrun.",
   "horizon.friends.share_failed": "Kon de wereld neet deile: %s",
-  "horizon.friends.finding_route": "Zoe wie vrun dich kinne bereike…"
+  "horizon.friends.finding_route": "Zoe wie vrun dich kinne bereike…",
+  "horizon.multiplayer.join": "Sluit aan",
+  "horizon.multiplayer.join_friend": "Doe dich aan bij un vrund",
+  "horizon.multiplayer.invite_code": "Uitnodigingscode",
+  "horizon.multiplayer.relay": "Relais (optioneel)"
 }

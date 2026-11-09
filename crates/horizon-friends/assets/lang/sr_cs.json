@@ -14,5 +14,9 @@
   "horizon.friends.wrong_code": "Neko je probao pogrešan kod.",
   "horizon.friends.code_ready": "Vaš pozivni kod je spreman: Meni igre, Igrajte se sa prijateljima. Kopirajte ga i pošaljite svojim prijateljima.",
   "horizon.friends.share_failed": "Ne mogu da podelim svet: %s",
-  "horizon.friends.finding_route": "Pronalaženje načina na koji prijatelji mogu da vas kontaktiraju…"
+  "horizon.friends.finding_route": "Pronalaženje načina na koji prijatelji mogu da vas kontaktiraju…",
+  "horizon.multiplayer.join": "Pridružite se",
+  "horizon.multiplayer.join_friend": "Pridružite se prijatelju",
+  "horizon.multiplayer.invite_code": "Invite Code",
+  "horizon.multiplayer.relay": "Relej (opciono)"
 }

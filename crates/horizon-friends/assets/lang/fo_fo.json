@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Ov nógvar skeivar stuttkour, so stafettin er sløkt, til tú deilir aftur. Vinir kunnu framvegis melda seg til við fullu koduni.",
   "horizon.friends.code_ready": "Tín boðkoda er klár: Spælvalmynd, Spæl við vinum. Kopiera tað og send tað til tínar vinir.",
   "horizon.friends.share_failed": "Kundi ikki deila heimin: %s",
-  "horizon.friends.finding_route": "At finna útav, hvussu vinir kunnu røkka tær..."
+  "horizon.friends.finding_route": "At finna útav, hvussu vinir kunnu røkka tær...",
+  "horizon.multiplayer.join": "Ver við",
+  "horizon.multiplayer.join_friend": "Melda teg til ein vin",
+  "horizon.multiplayer.invite_code": "Boðkoda",
+  "horizon.multiplayer.relay": "Stafett (valfrítt)"
 }

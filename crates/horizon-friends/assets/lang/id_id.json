@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Terlalu banyak kode pendek yang salah, sehingga relay nonaktif hingga Anda berbagi lagi. Teman tetap dapat bergabung dengan kode lengkap.",
   "horizon.friends.code_ready": "Kode undangan Anda sudah siap: Menu Game -> Bermain dengan Teman. Salin dan kirimkan ke teman-teman Anda.",
   "horizon.friends.share_failed": "Tidak dapat membagikan dunia: %s",
-  "horizon.friends.finding_route": "Mencari cara agar teman dapat menjangkau Anda…"
+  "horizon.friends.finding_route": "Mencari cara agar teman dapat menjangkau Anda…",
+  "horizon.multiplayer.join": "Gabung",
+  "horizon.multiplayer.join_friend": "Gabung dengan Teman",
+  "horizon.multiplayer.invite_code": "Kode Undangan",
+  "horizon.multiplayer.relay": "Relay (opsional)"
 }

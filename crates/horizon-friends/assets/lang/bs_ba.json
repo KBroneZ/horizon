@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Previše pogrešnih kratkih kodova, pa je relej isključen dok ponovo ne podijelite. Prijatelji se još mogu pridružiti s punim kodom.",
   "horizon.friends.code_ready": "Vaš pozivni kod je spreman: Meni igre, Igrajte se sa prijateljima. Kopirajte ga i pošaljite svojim prijateljima.",
   "horizon.friends.share_failed": "Ne mogu dijeliti svijet: %s",
-  "horizon.friends.finding_route": "Pronalaženje načina na koji prijatelji mogu doći do vas…"
+  "horizon.friends.finding_route": "Pronalaženje načina na koji prijatelji mogu doći do vas…",
+  "horizon.multiplayer.join": "Pridružite se",
+  "horizon.multiplayer.join_friend": "Pridružite se prijatelju",
+  "horizon.multiplayer.invite_code": "Pozivni kod",
+  "horizon.multiplayer.relay": "Relej (opciono)"
 }

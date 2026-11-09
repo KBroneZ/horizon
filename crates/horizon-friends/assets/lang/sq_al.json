@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Shumë kode të shkurtra të gabuara, prandaj releja është e fikur derisa të ndash përsëri. Miqtë mund të bashkohen ende me kodin e plotë.",
   "horizon.friends.code_ready": "Kodi juaj i ftesës është gati: Menyja e lojës, Luaj me miqtë. Kopjojeni dhe dërgojuni miqve tuaj.",
   "horizon.friends.share_failed": "Nuk mund ta ndaja botën: %s",
-  "horizon.friends.finding_route": "Duke gjetur se si miqtë mund t'ju kontaktojnë…"
+  "horizon.friends.finding_route": "Duke gjetur se si miqtë mund t'ju kontaktojnë…",
+  "horizon.multiplayer.join": "Bashkohu",
+  "horizon.multiplayer.join_friend": "Bashkohu me një mik",
+  "horizon.multiplayer.invite_code": "Kodi i Ftesës",
+  "horizon.multiplayer.relay": "Rele (opsionale)"
 }

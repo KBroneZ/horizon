@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "बहुत अधिक गलत शॉर्ट कोड, इसलिए दोबारा साझा करने तक रिले बंद है। मित्र अभी भी पूर्ण कोड से जुड़ सकते हैं।",
   "horizon.friends.code_ready": "आपका आमंत्रण कोड तैयार है: गेम मेनू, प्ले विद फ्रेंड्स। इसे कॉपी करें और अपने मित्रों को भेजें।",
   "horizon.friends.share_failed": "दुनिया साझा नहीं की जा सकी: %s",
-  "horizon.friends.finding_route": "ढूंढ रहे हैं कि मित्र आप तक कैसे पहुँच सकते हैं…"
+  "horizon.friends.finding_route": "ढूंढ रहे हैं कि मित्र आप तक कैसे पहुँच सकते हैं…",
+  "horizon.multiplayer.join": "शामिल हों",
+  "horizon.multiplayer.join_friend": "मित्र से जुड़ें",
+  "horizon.multiplayer.invite_code": "आमंत्रण कोड",
+  "horizon.multiplayer.relay": "रिले (वैकल्पिक)"
 }

@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Gormod o godau byr anghywir, felly mae'r cyfnewidydd i ffwrdd nes i chi rannu eto. Gall ffrindiau ymuno o hyd â'r cod llawn.",
   "horizon.friends.code_ready": "Mae eich cod gwahoddiad yn barod: Dewislen Gêm, Chwarae gyda Ffrindiau. Copïwch ef a'i anfon at eich ffrindiau.",
   "horizon.friends.share_failed": "Methu rhannu'r byd: %s",
-  "horizon.friends.finding_route": "Darganfod sut y gall ffrindiau eich cyrraedd…"
+  "horizon.friends.finding_route": "Darganfod sut y gall ffrindiau eich cyrraedd…",
+  "horizon.multiplayer.join": "Ymuno",
+  "horizon.multiplayer.join_friend": "Ymunwch â Ffrind",
+  "horizon.multiplayer.invite_code": "Cod Gwahodd",
+  "horizon.multiplayer.relay": "Cyfnewid (dewisol)"
 }

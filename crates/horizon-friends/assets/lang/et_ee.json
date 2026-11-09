@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Liiga palju valesid lühikoode, seega relee on väljas, kuni uuesti jagad. Sõbrad saavad siiski täiskoodiga liituda.",
   "horizon.friends.code_ready": "Teie kutsekood on valmis: Mängumenüü, Mängige sõpradega. Kopeerige see ja saatke see oma sõpradele.",
   "horizon.friends.share_failed": "Ei saanud maailma jagada: %s",
-  "horizon.friends.finding_route": "Kuidas sõbrad teiega ühendust saavad…"
+  "horizon.friends.finding_route": "Kuidas sõbrad teiega ühendust saavad…",
+  "horizon.multiplayer.join": "Liitu",
+  "horizon.multiplayer.join_friend": "Liituge sõbraga",
+  "horizon.multiplayer.invite_code": "Kutsekood",
+  "horizon.multiplayer.relay": "Relee (valikuline)"
 }

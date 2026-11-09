@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Masse codiçs curts sbalâts, cussì il relê al è spent fin che no tu condividis di gnûf. I amîs a puedin ancjemò jentrâ cul codiç complet.",
   "horizon.friends.code_ready": "Il to codiç di invit al è pront: Menu dal zûc, Zugâ cui amîs. Copielu e mandâlu ai tois amiis.",
   "horizon.friends.share_failed": "No rivave a condividi il mont: %s",
-  "horizon.friends.finding_route": "Cjatâ cemût che i amîs a puedin rivâ a te..."
+  "horizon.friends.finding_route": "Cjatâ cemût che i amîs a puedin rivâ a te...",
+  "horizon.multiplayer.join": "Iscrivitvi",
+  "horizon.multiplayer.join_friend": "Iscrivitvi a un amì",
+  "horizon.multiplayer.invite_code": "Codiç di invit",
+  "horizon.multiplayer.relay": "Relê (opzionâl)"
 }

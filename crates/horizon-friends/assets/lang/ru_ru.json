@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Слишком много неверных коротких кодов, поэтому ретранслятор выключен, пока вы не откроете доступ снова. Друзья всё ещё могут войти по полному коду.",
   "horizon.friends.code_ready": "Ваш код приглашения готов: меню игры, «Играть с друзьями». Скопируйте его и отправьте друзьям.",
   "horizon.friends.share_failed": "Не удалось открыть мир: %s",
-  "horizon.friends.finding_route": "Ищем, как друзья могут к вам подключиться…"
+  "horizon.friends.finding_route": "Ищем, как друзья могут к вам подключиться…",
+  "horizon.multiplayer.join": "Подключиться",
+  "horizon.multiplayer.join_friend": "Играть с другом",
+  "horizon.multiplayer.invite_code": "Код приглашения",
+  "horizon.multiplayer.relay": "Ретранслятор (необязательно)"
 }

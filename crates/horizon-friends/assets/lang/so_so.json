@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Koodhadhka gaaban ee khaldan ayaa aad u badan, sidaas darteed gudbinta waa damin ilaa aad mar kale wadaagto. Saaxiibadu wali waxay ku biiri karaan koodhka buuxa.",
   "horizon.friends.code_ready": "Koodhka martiqaadkaagu waa diyaar: Menu Game, La ciyaar asxaabta. Koobiyi una dir asxaabtaada.",
   "horizon.friends.share_failed": "Lama wadaagi karo adduunka: %s",
-  "horizon.friends.finding_route": "Helitaanka sida saaxiibadu ku heli karaan…"
+  "horizon.friends.finding_route": "Helitaanka sida saaxiibadu ku heli karaan…",
+  "horizon.multiplayer.join": "Ku biir",
+  "horizon.multiplayer.join_friend": "Ku biir saaxiib",
+  "horizon.multiplayer.invite_code": "Koodhka martiqaadka",
+  "horizon.multiplayer.relay": "Gudbinta (ikhtiyaar)"
 }

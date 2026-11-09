@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Туура эмес кыска коддор өтө көп болгондуктан, кайра бөлүшпөйүнчө реле өчүк. Достар толук код менен кошула алышат.",
   "horizon.friends.code_ready": "Чакыруу коду даяр: Оюн менюсу, Достор менен ойноо. Аны көчүрүп, досторуңузга жөнөтүңүз.",
   "horizon.friends.share_failed": "Дүйнөнү бөлүшө алган жок: %s",
-  "horizon.friends.finding_route": "Достор сиз менен кантип байланыша аларын издөө…"
+  "horizon.friends.finding_route": "Достор сиз менен кантип байланыша аларын издөө…",
+  "horizon.multiplayer.join": "Кошулуу",
+  "horizon.multiplayer.join_friend": "Доско кошулуңуз",
+  "horizon.multiplayer.invite_code": "Чакыруу коду",
+  "horizon.multiplayer.relay": "Реле (милдеттүү эмес)"
 }

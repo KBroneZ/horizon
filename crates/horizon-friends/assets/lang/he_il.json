@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "יותר מדי קודים קצרים שגויים, ולכן הממסר כבוי עד שתשתף שוב. חברים עדיין יכולים להצטרף עם הקוד המלא.",
   "horizon.friends.code_ready": "קוד ההזמנה שלך מוכן: תפריט משחק, שחק עם חברים. העתק אותו ושלח אותו לחברים שלך.",
   "horizon.friends.share_failed": "לא יכולתי לשתף את העולם: %s",
-  "horizon.friends.finding_route": "מוצא כיצד חברים יכולים להגיע אליך..."
+  "horizon.friends.finding_route": "מוצא כיצד חברים יכולים להגיע אליך...",
+  "horizon.multiplayer.join": "הצטרף",
+  "horizon.multiplayer.join_friend": "הצטרף לחבר",
+  "horizon.multiplayer.invite_code": "קוד הזמנה",
+  "horizon.multiplayer.relay": "ממסר (אופציונלי)"
 }

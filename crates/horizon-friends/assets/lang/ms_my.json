@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Terlalu banyak kod pendek yang salah, jadi geganti dimatikan sehingga anda berkongsi semula. Rakan masih boleh menyertai dengan kod penuh.",
   "horizon.friends.code_ready": "Kod jemputan anda sudah sedia: Menu Permainan, Main dengan Rakan. Salin dan hantar kepada rakan anda.",
   "horizon.friends.share_failed": "Tidak dapat berkongsi dunia: %s",
-  "horizon.friends.finding_route": "Mencari cara rakan boleh menghubungi anda…"
+  "horizon.friends.finding_route": "Mencari cara rakan boleh menghubungi anda…",
+  "horizon.multiplayer.join": "Sertai",
+  "horizon.multiplayer.join_friend": "Sertai Rakan",
+  "horizon.multiplayer.invite_code": "Kod Jemputan",
+  "horizon.multiplayer.relay": "Relay (pilihan)"
 }

@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "短いコードの入力ミスが多すぎるため、再び共有するまでリレーはオフです。友達は完全なコードなら参加できます。",
   "horizon.friends.code_ready": "招待コードの準備が整いました: ゲーム メニュー、友達とプレイ。コピーして友達に送信してください。",
   "horizon.friends.share_failed": "世界を共有できませんでした: %s",
-  "horizon.friends.finding_route": "友達があなたに連絡する方法を調べています…"
+  "horizon.friends.finding_route": "友達があなたに連絡する方法を調べています…",
+  "horizon.multiplayer.join": "参加する",
+  "horizon.multiplayer.join_friend": "友達に加わる",
+  "horizon.multiplayer.invite_code": "招待コード",
+  "horizon.multiplayer.relay": "リレー（オプション）"
 }

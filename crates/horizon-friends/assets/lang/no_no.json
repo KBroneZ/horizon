@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "For mange feil korte koder, så reléet er av til du deler på nytt. Venner kan fortsatt bli med med den fulle koden.",
   "horizon.friends.code_ready": "Invitasjonskoden din er klar: Spillmeny, Spill med venner. Kopier den og send den til vennene dine.",
   "horizon.friends.share_failed": "Kunne ikke dele verden: %s",
-  "horizon.friends.finding_route": "Finner hvordan venner kan nå deg …"
+  "horizon.friends.finding_route": "Finner hvordan venner kan nå deg …",
+  "horizon.multiplayer.join": "Bli med",
+  "horizon.multiplayer.join_friend": "Bli med en venn",
+  "horizon.multiplayer.invite_code": "Invitasjonskode",
+  "horizon.multiplayer.relay": "Relé (valgfritt)"
 }

@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "رموز قصيرة خاطئة كثيرة، لذا أُوقف التتابع حتى تشارك مجددًا. يمكن للأصدقاء الانضمام بالرمز الكامل.",
   "horizon.friends.code_ready": "رمز الدعوة الخاص بك جاهز: قائمة الألعاب، العب مع الأصدقاء. انسخها وأرسلها إلى أصدقائك.",
   "horizon.friends.share_failed": "لا يمكن مشاركة العالم: %s",
-  "horizon.friends.finding_route": "التعرف على كيفية وصول الأصدقاء إليك..."
+  "horizon.friends.finding_route": "التعرف على كيفية وصول الأصدقاء إليك...",
+  "horizon.multiplayer.join": "انضم",
+  "horizon.multiplayer.join_friend": "انضم إلى صديق",
+  "horizon.multiplayer.invite_code": "رمز الدعوة",
+  "horizon.multiplayer.relay": "التتابع (اختياري)"
 }

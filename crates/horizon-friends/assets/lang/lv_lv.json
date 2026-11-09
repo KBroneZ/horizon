@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Pārāk daudz nepareizu īso kodu, tāpēc relejs ir izslēgts, līdz kopīgojat vēlreiz. Draugi joprojām var pievienoties ar pilnu kodu.",
   "horizon.friends.code_ready": "Jūsu ielūguma kods ir gatavs: Spēļu izvēlne, Spēlējiet ar draugiem. Kopējiet to un nosūtiet draugiem.",
   "horizon.friends.share_failed": "Nevarēja kopīgot pasauli: %s",
-  "horizon.friends.finding_route": "Noskaidro, kā draugi var ar jums sazināties…"
+  "horizon.friends.finding_route": "Noskaidro, kā draugi var ar jums sazināties…",
+  "horizon.multiplayer.join": "Pievienojieties",
+  "horizon.multiplayer.join_friend": "Pievienojieties draugam",
+  "horizon.multiplayer.invite_code": "Uzaicinājuma kods",
+  "horizon.multiplayer.relay": "Relejs (pēc izvēles)"
 }

@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Massa codis curts incorrectes, així que el relé està aturat fins que tornis a compartir. Els amics encara s'hi poden unir amb el codi complet.",
   "horizon.friends.code_ready": "El teu codi d'invitació està preparat: Menú de joc, Juga amb els amics. Copia'l i envia'l als teus amics.",
   "horizon.friends.share_failed": "No s'ha pogut compartir el món: %s",
-  "horizon.friends.finding_route": "Trobar com els amics et poden arribar..."
+  "horizon.friends.finding_route": "Trobar com els amics et poden arribar...",
+  "horizon.multiplayer.join": "Uneix-te",
+  "horizon.multiplayer.join_friend": "Uneix-te a un amic",
+  "horizon.multiplayer.invite_code": "Codi d'invitació",
+  "horizon.multiplayer.relay": "Relé (opcional)"
 }

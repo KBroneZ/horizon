@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Бик күп дөрес булмаган кыска код, шуңа күрә сез яңадан уртаклашканчы реле сүнгән. Дуслар тулы код белән кушыла ала.",
   "horizon.friends.code_ready": "Сезнең чакыру кодыгыз әзер: Уен менюсы, Дуслар белән уйнагыз. Аны күчереп алыгыз һәм дусларыгызга җибәрегез.",
   "horizon.friends.share_failed": "Дөнья белән уртаклаша алмадым: %s",
-  "horizon.friends.finding_route": "Дусларның сезгә ничек ирешә алуын табу…"
+  "horizon.friends.finding_route": "Дусларның сезгә ничек ирешә алуын табу…",
+  "horizon.multiplayer.join": "Кушыл",
+  "horizon.multiplayer.join_friend": "Дуска кушыл",
+  "horizon.multiplayer.invite_code": "Чакыру коды",
+  "horizon.multiplayer.relay": "Эстафета (өстәмә)"
 }

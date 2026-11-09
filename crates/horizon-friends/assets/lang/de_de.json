@@ -15,5 +15,9 @@
   "horizon.friends.wrong_code": "Jemand hat einen falschen Code versucht.",
   "horizon.friends.code_ready": "Dein Einladungscode ist bereit: Spielmenü, Mit Freunden spielen. Kopiere ihn und schicke ihn an deine Freunde.",
   "horizon.friends.share_failed": "Die Welt konnte nicht geteilt werden: %s",
-  "horizon.friends.finding_route": "Es wird ermittelt, wie Freunde dich erreichen können …"
+  "horizon.friends.finding_route": "Es wird ermittelt, wie Freunde dich erreichen können …",
+  "horizon.multiplayer.join": "Beitreten",
+  "horizon.multiplayer.join_friend": "Freund beitreten",
+  "horizon.multiplayer.invite_code": "Einladungscode",
+  "horizon.multiplayer.relay": "Relay (optional)"
 }

@@ -15,5 +15,9 @@
   "horizon.friends.relay_stopped": "Napakaraming maling short code, kaya naka-off ang relay hanggang magbahagi ka muli. Nakakasali pa rin ang mga kaibigan gamit ang buong code.",
   "horizon.friends.code_ready": "Handa na ang iyong code ng imbitasyon: Game Menu, Play with Friends. Kopyahin ito at ipadala sa iyong mga kaibigan.",
   "horizon.friends.share_failed": "Hindi maibahagi ang mundo: %s",
-  "horizon.friends.finding_route": "Hinahanap kung paano ka maaabot ng mga kaibigan..."
+  "horizon.friends.finding_route": "Hinahanap kung paano ka maaabot ng mga kaibigan...",
+  "horizon.multiplayer.join": "Sumali",
+  "horizon.multiplayer.join_friend": "Sumali sa isang Kaibigan",
+  "horizon.multiplayer.invite_code": "Code ng Imbitasyon",
+  "horizon.multiplayer.relay": "Relay (opsyonal)"
 }
