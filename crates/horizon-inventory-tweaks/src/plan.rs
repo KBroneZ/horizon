@@ -115,7 +115,9 @@ mod tests {
             "diamond_sword" => 1,
             _ => 64,
         };
-        let kind = item.bytes().fold(0u64, |h, b| h.wrapping_mul(31).wrapping_add(u64::from(b)));
+        let kind = item
+            .bytes()
+            .fold(0u64, |h, b| h.wrapping_mul(31).wrapping_add(u64::from(b)));
         Some(Stack {
             item: format!("minecraft:{item}"),
             count,
@@ -126,7 +128,10 @@ mod tests {
     fn rank(order: &'static [&'static str]) -> impl Fn(&Stack) -> Rank {
         move |s| {
             let id = s.item.trim_start_matches("minecraft:");
-            let i = order.iter().position(|o| *o == id).map_or(u32::MAX, |i| i as u32);
+            let i = order
+                .iter()
+                .position(|o| *o == id)
+                .map_or(u32::MAX, |i| i as u32);
             (i, id.to_owned())
         }
     }
@@ -209,13 +214,9 @@ mod tests {
         };
         let mut menu = Menu::new(Kind::Chest(3));
         menu.creative = true;
-        let engine = |s: &Option<Stack>| {
-            s.as_ref()
-                .map(|s| ItemStack::new(&s.item, s.count))
-        };
-        let ours = |s: Option<&ItemStack>| {
-            stack(s?.item.trim_start_matches("minecraft:"), s?.count)
-        };
+        let engine = |s: &Option<Stack>| s.as_ref().map(|s| ItemStack::new(&s.item, s.count));
+        let ours =
+            |s: Option<&ItemStack>| stack(s?.item.trim_start_matches("minecraft:"), s?.count);
         let names = ["stone", "dirt", "ender_pearl", "oak_log", "snowball"];
         let order = rank(&["oak_log", "stone", "dirt"]);
         let mut seed = 7u32;

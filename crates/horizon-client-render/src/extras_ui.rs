@@ -129,7 +129,11 @@ fn add_sections(groups: &mut Vec<Group<ExtraRow>>) {
                 Some(about) => row.about(label_text(about)),
                 None => row,
             };
-            let row = if section.live(r) { row } else { row.live(false) };
+            let row = if section.live(r) {
+                row
+            } else {
+                row.live(false)
+            };
             group_named(groups, name).rows.push(row);
         }
     }

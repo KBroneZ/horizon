@@ -8,7 +8,9 @@ fn stack(item: &str, count: u32) -> Option<Stack> {
         item: format!("minecraft:{item}"),
         count,
         max,
-        kind: item.bytes().fold(0, |h, b| h.wrapping_mul(31).wrapping_add(u64::from(b))),
+        kind: item
+            .bytes()
+            .fold(0, |h, b| h.wrapping_mul(31).wrapping_add(u64::from(b))),
     })
 }
 
@@ -41,11 +43,21 @@ impl Menu {
         }
         for i in 9..36 {
             let (row, col) = ((i - 9) / 9, (i - 9) % 9);
-            add(i, Role::Inventory, 8.0 + 18.0 * col as f32, 84.0 + 18.0 * row as f32);
+            add(
+                i,
+                Role::Inventory,
+                8.0 + 18.0 * col as f32,
+                84.0 + 18.0 * row as f32,
+            );
         }
         for i in 0..27 {
             let (row, col) = (i / 9, i % 9);
-            add(300 + i, Role::Storage, 8.0 + 18.0 * col as f32, 18.0 + 18.0 * row as f32);
+            add(
+                300 + i,
+                Role::Storage,
+                8.0 + 18.0 * col as f32,
+                18.0 + 18.0 * row as f32,
+            );
         }
         Menu {
             menu: "minecraft:generic_9x3",
@@ -131,9 +143,10 @@ impl Container for Menu {
             // Hotbar first, from the right, as `ChestMenu.quickMoveStack` fills the player's.
             other.sort_by_key(|(s, _)| (s.role != Role::Hotbar, std::cmp::Reverse(s.id.0)));
         }
-        let room = other
-            .iter()
-            .filter(|(_, s)| s.as_ref().is_some_and(|s| s.kind == from.kind && s.count < s.max));
+        let room = other.iter().filter(|(_, s)| {
+            s.as_ref()
+                .is_some_and(|s| s.kind == from.kind && s.count < s.max)
+        });
         let empty = other.iter().filter(|(_, s)| s.is_none()).take(1);
         room.chain(empty).map(|(s, _)| s.id).collect()
     }
@@ -187,7 +200,9 @@ impl Container for Menu {
     /// Stone, then dirt, then the rest by name.
     fn order(&mut self, slot: SlotId) -> (u32, String) {
         let item = self.at(slot.0).as_ref().map(|s| s.item.clone()).unwrap();
-        let rank = ["minecraft:stone", "minecraft:dirt"].iter().position(|i| *i == item);
+        let rank = ["minecraft:stone", "minecraft:dirt"]
+            .iter()
+            .position(|i| *i == item);
         (rank.map_or(u32::MAX, |r| r as u32), item)
     }
 }
@@ -196,7 +211,8 @@ impl Menu {
     /// Where a quick move from `slot` puts its stack whole: the first empty slot across.
     fn empty_across(&self, slot: SlotId) -> u32 {
         let storage = self.role(slot) == Role::Storage;
-        let across = |(t, v): &&(Slot, Option<Stack>)| (t.role == Role::Storage) != storage && v.is_none();
+        let across =
+            |(t, v): &&(Slot, Option<Stack>)| (t.role == Role::Storage) != storage && v.is_none();
         self.slots.iter().find(across).unwrap().0.id.0
     }
 }
@@ -208,7 +224,10 @@ fn a_right_drag_places_one_in_each_slot_entered_once() {
     let mut tweaks = tweaks::Tweaks::default();
     assert!(tweaks.press(true, &mut menu, Some(SlotId(300)), true));
     assert!(tweaks.drag(true, &mut menu, Some(SlotId(301))));
-    assert!(tweaks.drag(true, &mut menu, Some(SlotId(300))), "visited: nothing more");
+    assert!(
+        tweaks.drag(true, &mut menu, Some(SlotId(300))),
+        "visited: nothing more"
+    );
     tweaks.release();
     assert_eq!((menu.count(300), menu.count(301)), (1, 1));
     assert_eq!(menu.carried.as_ref().map(|s| s.count), Some(1));
@@ -226,9 +245,15 @@ fn off_or_in_a_menu_with_costs_the_screen_stays_vanillas() {
         menu.menu = name;
         menu.carried = stack("stone", 3);
         let mut tweaks = tweaks::Tweaks::default();
-        assert!(!tweaks.press(on, &mut menu, Some(SlotId(300)), true), "{name}");
+        assert!(
+            !tweaks.press(on, &mut menu, Some(SlotId(300)), true),
+            "{name}"
+        );
         assert!(!tweaks.drag(on, &mut menu, Some(SlotId(301))), "{name}");
-        assert!(!tweaks.wheel(on, &mut menu, Some(SlotId(300)), -1.0), "{name}");
+        assert!(
+            !tweaks.wheel(on, &mut menu, Some(SlotId(300)), -1.0),
+            "{name}"
+        );
         assert!(menu.clicks.is_empty(), "{name}");
     }
 }
@@ -243,11 +268,17 @@ fn a_left_drag_gathers_the_held_item_until_vanillas_drag_spreads() {
     let mut tweaks = tweaks::Tweaks::default();
     // The press is vanilla's; the tweaks watch.
     assert!(!tweaks.press(true, &mut menu, Some(SlotId(300)), false));
-    assert!(!tweaks.drag(true, &mut menu, Some(SlotId(302))), "another item");
+    assert!(
+        !tweaks.drag(true, &mut menu, Some(SlotId(302))),
+        "another item"
+    );
     assert!(tweaks.drag(true, &mut menu, Some(SlotId(301))));
     assert!(tweaks.drag(true, &mut menu, Some(SlotId(303))));
     assert_eq!(menu.carried.as_ref().map(|s| s.count), Some(22));
-    assert_eq!((menu.count(301), menu.count(302), menu.count(303)), (0, 5, 0));
+    assert_eq!(
+        (menu.count(301), menu.count(302), menu.count(303)),
+        (0, 5, 0)
+    );
     // Once vanilla's drag spread over a second slot, it stays vanilla's.
     let mut menu = Menu::chest().set(301, stack("stone", 5));
     menu.carried = stack("stone", 10);

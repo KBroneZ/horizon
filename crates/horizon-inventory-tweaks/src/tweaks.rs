@@ -68,7 +68,13 @@ fn crafting_result(c: &dyn Container, slot: SlotId) -> bool {
 impl Tweaks {
     /// A press on `slot`: true when the tweaks took it (a right-drag placing), else vanilla's press
     /// runs and the tweaks watch the drag.
-    pub fn press(&mut self, on: bool, c: &mut dyn Container, slot: Option<SlotId>, right: bool) -> bool {
+    pub fn press(
+        &mut self,
+        on: bool,
+        c: &mut dyn Container,
+        slot: Option<SlotId>,
+        right: bool,
+    ) -> bool {
         self.drag = None;
         let Some(slot) = slot.filter(|&s| !crafting_result(c, s)) else {
             return false;
@@ -159,7 +165,13 @@ impl Tweaks {
     }
 
     /// The wheel over the screen: true when the tweaks used it.
-    pub fn wheel(&mut self, on: bool, c: &mut dyn Container, slot: Option<SlotId>, delta: f32) -> bool {
+    pub fn wheel(
+        &mut self,
+        on: bool,
+        c: &mut dyn Container,
+        slot: Option<SlotId>,
+        delta: f32,
+    ) -> bool {
         if !on || !tweak_menu(c.menu()) || c.carried().is_some() {
             return false;
         }
@@ -214,7 +226,9 @@ fn other_side(c: &dyn Container, slot: SlotId) -> Vec<SlotId> {
     };
     let player = || {
         let hotbar = of(&[Role::Hotbar]).into_iter().rev();
-        hotbar.chain(of(&[Role::Inventory]).into_iter().rev()).collect()
+        hotbar
+            .chain(of(&[Role::Inventory]).into_iter().rev())
+            .collect()
     };
     match role(c, slot) {
         Some(Role::Storage | Role::Input | Role::Result) => player(),

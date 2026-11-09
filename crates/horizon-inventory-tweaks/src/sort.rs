@@ -91,7 +91,12 @@ fn sort(c: &mut dyn Container, slots: &[SlotId]) {
             ranks.insert(s.kind, c.order(slot));
         }
     }
-    let rank = |s: &Stack| ranks.get(&s.kind).cloned().unwrap_or((u32::MAX, String::new()));
+    let rank = |s: &Stack| {
+        ranks
+            .get(&s.kind)
+            .cloned()
+            .unwrap_or((u32::MAX, String::new()))
+    };
     for i in plan::plan(&stacks, &rank) {
         c.click(slots[i], Click::Pick { right: false });
     }
