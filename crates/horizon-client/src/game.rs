@@ -142,6 +142,8 @@ mod enderman_hurt_teleport_tests;
 mod enderman_placement_tests;
 mod entity;
 mod entity_culling;
+#[cfg(test)]
+mod entity_inside_tests;
 mod entity_sounds;
 mod event_loop;
 mod events;
@@ -163,15 +165,6 @@ mod frame_geometry;
 mod frames;
 #[cfg(feature = "friends")]
 mod friends;
-mod held_items;
-#[cfg(test)]
-mod setblock_order_tests;
-// Without Play with Friends: nothing shared, no Friends button (game/friends_off.rs).
-#[cfg(test)]
-mod entity_inside_tests;
-#[cfg(not(feature = "friends"))]
-#[path = "game/friends_off.rs"]
-mod friends;
 mod functions;
 mod game_mode;
 mod game_tests;
@@ -182,6 +175,7 @@ mod golems;
 mod growth;
 mod hand;
 mod headless;
+mod held_items;
 mod hud_editor;
 mod hud_room;
 mod ime;
@@ -423,6 +417,8 @@ mod seats;
 mod server_links;
 mod server_packs;
 mod server_travel;
+#[cfg(test)]
+mod setblock_order_tests;
 mod shader_packs;
 mod share_view;
 mod sheep_dye;

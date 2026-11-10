@@ -10,10 +10,8 @@
 //!
 //! It sees the game only through `horizon_hooks` (the `ShareView` its `Hooks::share` tick
 //! gets, `Hooks::lan_closed`, its page, `tr`) and keeps what it shares in its own statics, so
-//! it can leave the engine for horizon-friends (spec #14167). The `horizon-ctl friends` command
-//! below still reaches it from `Game` until then.
-use super::Game;
-use horizon_client::Result;
+//! it can leave the engine for horizon-friends (spec #14167). `horizon-ctl friends` reaches it
+//! through `Hooks::control`.
 use horizon_friends::{Host, HostConfig, HostEvent, PathMode, host::DEFAULT_PORT, reach, stun};
 use horizon_hooks::{
     Hooks,
@@ -99,6 +97,20 @@ pub struct Friends;
 pub static HOOKS: Friends = Friends;
 
 impl Hooks for Friends {
+    fn control_commands(&self) -> Option<(&'static str, &'static [&'static str])> {
+        Some(("friends", HELP))
+    }
+
+    /// `horizon-ctl friends host|stop|status`.
+    fn control(
+        &self,
+        words: &[&str],
+        world: &mut dyn ShareView,
+    ) -> Option<std::result::Result<String, String>> {
+        (words.first() == Some(&"friends"))
+            .then(|| control(words.get(1).copied(), world).map(|answer| answer.to_string()))
+    }
+
     /// What the page left for the game: chat lines, a button's press, the guests while it is
     /// open. With nothing left, one relaxed load.
     fn share(&self, world: &mut dyn ShareView) {
@@ -534,9 +546,10 @@ fn control(
             Ok(json!({ "ok": true }))
         }
         Some("status") => {
-            poll();
-            say(world);
+            // A splitscreen guest asking hears nothing of P1's sharing, and its chat stays its own.
             let view = if world.can_share() {
+                poll();
+                say(world);
                 view(|| {
                     let mut guests = Vec::new();
                     world.players(&mut |name| guests.push(name.to_owned()));
@@ -564,19 +577,6 @@ fn control(
             }))
         }
         _ => Err("friends host|stop|status".into()),
-    }
-}
-
-impl Game<'_> {
-    /// `horizon-ctl friends ...`.
-    pub(super) fn friends_control(&mut self, words: &[&str]) -> Result<Option<serde_json::Value>> {
-        if words[0] != "friends" {
-            return Ok(None);
-        }
-        Ok(Some(control(
-            words.get(1).copied(),
-            &mut self.share_view(),
-        )?))
     }
 }
 
@@ -642,6 +642,15 @@ mod tests {
         );
         stop(&mut guest);
         copy(&mut guest);
+        assert!(guest.did.is_empty(), "{:?}", guest.did);
+        // horizon-ctl reaches the same through the hook; other commands aren't its.
+        let status = HOOKS
+            .control(&["friends", "status"], &mut guest)
+            .unwrap()
+            .unwrap();
+        let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+        assert_eq!(status["sharing"], false);
+        assert!(HOOKS.control(&["lan", "status"], &mut guest).is_none());
         assert!(guest.did.is_empty(), "{:?}", guest.did);
         assert!(!ON.load(Ordering::Relaxed));
     }

@@ -36,19 +36,22 @@ impl Game<'_> {
         }
     }
 
+    /// `Hooks::control`: a `horizon-ctl` command a crate answers, with this window's world.
+    pub(super) fn hooks_control(
+        &mut self,
+        words: &[&str],
+    ) -> horizon_client::Result<Option<serde_json::Value>> {
+        match horizon_hooks::engine::control(words, &mut World(self)) {
+            None => Ok(None),
+            Some(Ok(json)) => Ok(Some(serde_json::from_str(&json)?)),
+            Some(Err(why)) => Err(why.into()),
+        }
+    }
+
     /// A singleplayer world runs on this window's server thread, so it can be shared, as Open
     /// to LAN publishes it; another server can't be.
     pub(super) fn can_share(&self) -> bool {
         self.title.is_none() && (self.remote.is_none() || self.integrated.is_some())
-    }
-}
-
-impl<'g> Game<'g> {
-    /// The view of this window's world, for the engine's own Friends screen and command until
-    /// they move to the crate.
-    #[cfg(feature = "friends")]
-    pub(super) fn share_view(&mut self) -> World<'_, 'g> {
-        World(self)
     }
 }
 

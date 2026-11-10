@@ -289,7 +289,8 @@ The hooks today: `started` (once, when someone plays: not a dedicated server, a 
 `published` (the world opened to or closed from LAN or friends, on change), `shutdown` (the window closed, the
 world saved), `tunnel` (the resolver of `friend:` addresses, Play with Friends'), `share` (each client tick, the window's world
 through `share::ShareView`: open it to LAN, its players, chat, the clipboard) and `lan_closed` (it stopped being open
-to LAN). **A hook you need and don't find:** add a method with an empty default to `Hooks` and a function in
+to LAN), `control_commands` and `control` (the `horizon-ctl` commands a crate answers in the game, with that view).
+**A hook you need and don't find:** add a method with an empty default to `Hooks` and a function in
 `horizon_hooks::engine` that the engine calls where vanilla does the matching thing; give it plain data or a type
 the engine owns, never one from above. A hook that needs engine types the platform doesn't expose yet (a draw
 context for HUD and chat overlays, a settings page) comes with that type's platform API (M6). An extension point

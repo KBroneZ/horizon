@@ -60,7 +60,8 @@ game only through `horizon_hooks`: `Hooks::share` each client tick with a `share
 LAN, its players, chat, the clipboard, a link), `Hooks::lan_closed`, its page (`pages::Place::PauseFriends`, what
 the pause menu's Friends icon opens; a press runs on the next tick) and `tr`. It keeps what it shares in its own
 statics. It still lives in horizon-client (`game/friends.rs`, the `friends` feature, which comes with
-`horizon-extras`) until `horizon-ctl` offers commands to crates above the engine (#14167).
+`horizon-extras`), and answers `horizon-ctl friends` through `Hooks::control`, until it moves to horizon-friends
+(#14167).
 
 **Codes.** Crockford base32 (`0-9 A-Z` without `I L O U`; input ignores case, spaces and dashes and reads
 `O` as `0`, `I`/`L` as `1`) in groups of five, with a 16-bit checksum so a typo is caught before
