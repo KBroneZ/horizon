@@ -10,17 +10,6 @@ fn shares(game: &Game<'_>) -> bool {
     !game.serving() && !game.options.split_guest
 }
 
-/// Play with Friends' host side (game/friends.rs) hears the hooks, until it moves to
-/// horizon-friends (spec #14167). Before the hooks are sealed.
-#[cfg(feature = "friends")]
-pub(crate) fn register_friends() {
-    if horizon_hooks::register(&super::friends::HOOKS).is_err()
-        || horizon_hooks::pages::register(&super::friends::PAGE).is_err()
-    {
-        log::warn!("Play with Friends registered after the game started: sharing is off");
-    }
-}
-
 impl Game<'_> {
     /// `Hooks::share`, once a client tick (`Minecraft.runTick`, so also while paused).
     pub(super) fn share_tick(&mut self) {

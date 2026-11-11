@@ -163,8 +163,6 @@ mod foxes;
 mod frame_autotune;
 mod frame_geometry;
 mod frames;
-#[cfg(feature = "friends")]
-mod friends;
 mod functions;
 mod game_mode;
 mod game_tests;
@@ -599,8 +597,6 @@ use resource_loader::{
     EntityModels, GameCpuResources, Loaded, LoaderMsg, PendingWorldEntry, WorldRestLoader,
     run_loading, write_report,
 };
-#[cfg(feature = "friends")]
-pub(crate) use share_view::register_friends;
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},

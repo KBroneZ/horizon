@@ -5,20 +5,21 @@
 //! and the key, so friends join with no server of ours; a relay the player
 //! configured adds a short code and a fallback. The integrated server is the
 //! LAN one, unchanged: tunnelled guests are LAN guests that connect from the
-//! loopback address. The joining side is horizon-friends' (`game`), registered by
-//! horizon-official.
+//! loopback address. The joining side is [`super`]'s resolver; horizon-official registers
+//! both ([`super::HOOKS`], [`PAGE`]).
 //!
-//! It sees the game only through `horizon_hooks` (the `ShareView` its `Hooks::share` tick
-//! gets, `Hooks::lan_closed`, its page, `tr`) and keeps what it shares in its own statics, so
-//! it can leave the engine for horizon-friends (spec #14167). `horizon-ctl friends` reaches it
-//! through `Hooks::control`.
-use horizon_friends::{Host, HostConfig, HostEvent, PathMode, host::DEFAULT_PORT, reach, stun};
-use horizon_hooks::{
-    Hooks,
+//! It sees the game only through the platform's hooks (the `ShareView` its `Hooks::share` tick
+//! gets, `Hooks::lan_closed`, `Hooks::control` for `horizon-ctl friends`, its page, `tr`) and
+//! keeps what it shares in its own statics.
+use crate::{Host, HostConfig, HostEvent, PathMode, host::DEFAULT_PORT, reach, stun};
+use horizon_platform::{
+    hooks::{
+        Hooks,
+        share::{LanOptions, ShareView},
+    },
     pages::{Act, Page, Place, Row},
-    share::{LanOptions, ShareView},
+    version::{PROTOCOL_VERSION, VANILLA_VERSION},
 };
-use horizon_protocol::{GAME_VERSION, PROTOCOL_VERSION};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
@@ -92,11 +93,11 @@ fn take() -> Option<Sharing> {
     taken
 }
 
-/// Registered by the engine's entry while this module is part of it.
-pub struct Friends;
-pub static HOOKS: Friends = Friends;
+/// The host side's hooks, which [`super::HOOKS`] passes on.
+pub(super) struct Share;
+pub(super) static HOOKS: Share = Share;
 
-impl Hooks for Friends {
+impl Hooks for Share {
     fn control_commands(&self) -> Option<(&'static str, &'static [&'static str])> {
         Some(("friends", HELP))
     }
@@ -145,7 +146,7 @@ impl Hooks for Friends {
     }
 }
 
-pub const HELP: &[&str] = &[
+const HELP: &[&str] = &[
     "friends host                   share the open world behind an invite code",
     "friends stop                   stop sharing",
     "friends status                 the code, how friends reach this host, the guests",
@@ -153,7 +154,25 @@ pub const HELP: &[&str] = &[
 
 /// A string in the player's language, or the English one.
 fn tr(key: &str, english: &str) -> String {
-    horizon_hooks::tr(key).unwrap_or_else(|| english.to_owned())
+    horizon_platform::hooks::tr(key).unwrap_or_else(|| english.to_owned())
+}
+
+/// One of the player's Horizon preferences, `key:value` lines in `horizon.txt` beside
+/// `options.txt` in the game folder (the working directory), where the game keeps its own.
+fn preference(key: &str) -> Option<String> {
+    let text = std::fs::read_to_string(std::env::current_dir().ok()?.join("horizon.txt")).ok()?;
+    text.lines().find_map(|l| {
+        let (k, v) = l.split_once(':')?;
+        (k.trim() == key).then(|| v.trim().to_owned())
+    })
+}
+
+/// The relay the player set on Join a Friend (`friendsRelay`), else `HORIZON_RELAY_URL`. None
+/// by default.
+fn relay() -> Option<String> {
+    preference("friendsRelay")
+        .filter(|r| !r.is_empty())
+        .or_else(crate::relay_url)
 }
 
 /// `HORIZON_STUN_SERVERS`, else `friendsStun` in horizon.txt, else the defaults.
@@ -161,8 +180,7 @@ fn stun_servers() -> Vec<String> {
     if std::env::var_os("HORIZON_STUN_SERVERS").is_some() {
         return stun::servers_from_env();
     }
-    let dir = std::env::current_dir().unwrap_or_default();
-    match horizon_client::ui_theme::preference(&dir, "friendsStun") {
+    match preference("friendsStun") {
         Some(list) => stun::parse_servers(&list),
         None => stun::servers_from_env(),
     }
@@ -188,8 +206,8 @@ fn start(world: &mut dyn ShareView) -> std::result::Result<(), String> {
     let host = Host::start(HostConfig {
         lan: std::net::SocketAddr::from(([127, 0, 0, 1], port)),
         protocol: PROTOCOL_VERSION,
-        game: GAME_VERSION.to_owned(),
-        relay: horizon_client::net::friends_relay_setting(),
+        game: VANILLA_VERSION.to_owned(),
+        relay: relay(),
         path: PathMode::from_env(),
         port: std::env::var("HORIZON_FRIENDS_PORT")
             .ok()
@@ -262,7 +280,7 @@ fn poll() {
         for event in sharing.host.poll() {
             match event {
                 HostEvent::Code(code) => {
-                    if sharing.code.is_some() && sharing.wrong >= horizon_friends::host::MAX_WRONG {
+                    if sharing.code.is_some() && sharing.wrong >= crate::host::MAX_WRONG {
                         sharing.notice = Some(tr(
                             "horizon.friends.short_code_changed",
                             "Someone kept trying a wrong short code, so it changed.",
