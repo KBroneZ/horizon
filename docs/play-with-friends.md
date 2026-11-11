@@ -59,7 +59,8 @@ host end connects to the world's LAN port over loopback, so tunnelled guests are
 game only through `horizon_hooks`: `Hooks::share` each client tick with a `share::ShareView` (open the world to
 LAN, its players, chat, the clipboard, a link), `Hooks::lan_closed`, its page (`pages::Place::PauseFriends`, what
 the pause menu's Friends icon opens; a press runs on the next tick) and `tr`. It keeps what it shares in its own
-statics, and answers `horizon-ctl friends` through `Hooks::control`. Both sides are horizon-friends' `game`
+statics, and answers `horizon-ctl friends` through `Hooks::control`. Its text (`horizon.friends.*`) is in
+`crates/horizon-friends/assets/lang/`, registered with the game's languages (`horizon_platform::lang`). Both sides are horizon-friends' `game`
 feature, which only the official executable registers: horizon-client's own executable shares nothing (#14167).
 
 **Codes.** Crockford base32 (`0-9 A-Z` without `I L O U`; input ignores case, spaces and dashes and reads

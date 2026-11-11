@@ -9,7 +9,7 @@
 #![forbid(unsafe_code)]
 
 use horizon_platform::hooks::{self, Hooks};
-use horizon_platform::{pages, settings};
+use horizon_platform::{lang, pages, settings};
 
 /// Every Horizon part in the game, in the order its hooks run.
 const PARTS: [&dyn Hooks; 4] = [
@@ -25,6 +25,8 @@ const PARTS: [&dyn Hooks; 4] = [
 ];
 /// Their settings, in the player's settings files.
 const STORES: [&dyn settings::Store; 1] = [&horizon_discord::SETTING];
+/// The lang files with their text (their `assets/lang`).
+const LANG: [&lang::Files; 1] = [horizon_friends::game::LANG];
 /// Their rows and pages in the options screens and menus.
 const PAGES: [&dyn pages::Page; 2] = [
     &horizon_discord::SECTION,
@@ -37,7 +39,8 @@ const PAGES: [&dyn pages::Page; 2] = [
 pub fn register() {
     let late = PARTS.into_iter().map(hooks::register);
     let late = late.chain(STORES.into_iter().map(settings::register));
-    for result in late.chain(PAGES.into_iter().map(pages::register)) {
+    let late = late.chain(PAGES.into_iter().map(pages::register));
+    for result in late.chain(LANG.into_iter().map(lang::register)) {
         if let Err(e) = result {
             // The executable registered after starting the game: a bug, not a player's problem.
             log::warn!("Horizon: an in-game part did not register: {e}");

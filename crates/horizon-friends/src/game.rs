@@ -1,8 +1,10 @@
 //! Play with Friends in the game (the `game` feature). Joining: the engine's `friend:`
 //! addresses (`horizon_platform::hooks::tunnel`) read as invite codes, and joined through this
 //! crate's tunnel. Hosting ([`share`]): the pause menu's Friends page shares the open world
-//! behind an invite code. `horizon-official` registers [`HOOKS`] and [`PAGE`]; the game's own
-//! executable has neither, so there no invite code joins and nothing is shared.
+//! behind an invite code. `horizon-official` registers [`HOOKS`], [`PAGE`] and its text
+//! ([`LANG`]); the game's own executable has none of them, so there no invite code joins and
+//! nothing is shared.
+mod lang;
 mod share;
 
 use crate::{
@@ -18,6 +20,7 @@ use horizon_platform::{
     },
     version::{PROTOCOL_VERSION, VANILLA_VERSION},
 };
+pub use lang::LANG;
 pub use share::PAGE;
 use std::net::SocketAddr;
 
