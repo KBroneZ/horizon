@@ -286,16 +286,14 @@ impl Game<'_> {
     pub(super) fn random_tick_chunks(&self, out: &mut Vec<(i32, i32)>) {
         let levels = self.tickets.levels();
         let bounds = levels.random_tick_bounds();
-        out.clear();
-        out.extend(self.world.chunks.keys().copied().filter(|&(x, z)| {
+        in_position_order(self.world.chunks.keys().copied(), out, |x, z| {
             if let Some((min_x, min_z, max_x, max_z)) = bounds
                 && (x < min_x || x > max_x || z < min_z || z > max_z)
             {
                 return false;
             }
             levels.random_ticking(x, z) && ticking_chunk(&self.world, x, z)
-        }));
-        out.sort_unstable();
+        });
     }
     /// Track which chunks are ticking (Ticks needs chunk load/unload).
     pub(super) fn sync_tick_chunks(&mut self) {
@@ -369,6 +367,18 @@ impl Game<'_> {
         }
         Ok(())
     }
+}
+
+/// The chunks of `keys` that `keep` accepts, into `out` sorted by position
+/// (`x`, then `z`), whatever order `keys` comes in (#15164).
+fn in_position_order(
+    keys: impl IntoIterator<Item = (i32, i32)>,
+    out: &mut Vec<(i32, i32)>,
+    mut keep: impl FnMut(i32, i32) -> bool,
+) {
+    out.clear();
+    out.extend(keys.into_iter().filter(|&(x, z)| keep(x, z)));
+    out.sort_unstable();
 }
 
 #[cfg(test)]

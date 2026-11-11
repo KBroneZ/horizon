@@ -55,3 +55,22 @@ fn chunks_random_tick_in_the_same_order_however_they_loaded() {
     sorted.sort_unstable();
     assert_eq!(a, sorted, "chunk position order");
 }
+
+/// Resource-free: the same chunks in three load orders give one list.
+#[test]
+fn ticking_chunks_come_out_in_position_order_whatever_the_load_order() {
+    let orders: [&[(i32, i32)]; 3] = [
+        &[(1, 0), (0, 1), (-1, 0), (0, 0), (5, 5), (0, -1)],
+        &[(5, 5), (0, -1), (0, 0), (1, 0), (-1, 0), (0, 1)],
+        &[(0, 0), (-1, 0), (0, 1), (5, 5), (1, 0), (0, -1)],
+    ];
+    for order in orders {
+        let mut out = vec![(9, 9)];
+        super::in_position_order(order.iter().copied(), &mut out, |x, z| (x, z) != (5, 5));
+        assert_eq!(
+            out,
+            [(-1, 0), (0, -1), (0, 0), (0, 1), (1, 0)],
+            "from {order:?}"
+        );
+    }
+}
