@@ -320,7 +320,12 @@ pub fn java_hash_order(
         "FallFlying",
         "sleeping_pos",
         "Brain",
+        "last_hurt_by_player",
+        "last_hurt_by_player_memory_time",
+        "last_hurt_by_mob",
+        "ticks_since_last_hurt_by_mob",
         "equipment",
+        "locator_bar_icon",
         // ArmorStand.
         "Invisible",
         "Small",
@@ -433,6 +438,22 @@ mod tests {
         assert!(
             pose_idx < immovable_idx,
             "expected `pose` before `immovable` in bucket 5, got: {rendered}"
+        );
+    }
+    #[test]
+    fn living_entity_fields_come_before_their_subclass_fields_in_a_shared_bucket() {
+        // `last_hurt_by_mob` shares a bucket with `ForcedAge` and `sound_variant`;
+        // `Mob.addAdditionalSaveData` runs `LivingEntity`'s first.
+        let tag = parse_snbt(
+            r#"{AgeLocked:0b,ForcedAge:0,last_hurt_by_mob:[I;24724,0,0,3],sound_variant:"minecraft:classic",ticks_since_last_hurt_by_mob:0}"#,
+        )
+        .unwrap()
+        .0;
+        let rendered = pretty(&tag).plain();
+        let at = |key: &str| rendered.find(key).unwrap();
+        assert!(
+            at("last_hurt_by_mob") < at("ForcedAge") && at("ForcedAge") < at("sound_variant"),
+            "{rendered}"
         );
     }
     #[test]

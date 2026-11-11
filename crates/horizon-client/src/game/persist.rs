@@ -4,6 +4,7 @@
 #[cfg(test)]
 mod anger_tests;
 mod display;
+mod last_hurt_by_mob;
 
 use super::{FallingBlock, Game};
 use horizon_client::{
@@ -1135,8 +1136,8 @@ impl Game<'_> {
             }
         }
         let id = m.id;
+        self.push_loaded_mob(m, &tag);
         self.remember(id, Some(uuid.unwrap_or(fresh)), tag);
-        self.mobs.push(m);
         if finalize {
             self.enchant_spawn_equipment(id);
             self.halloween_spawn_head(id);
@@ -1621,7 +1622,7 @@ impl Game<'_> {
     /// drops the record after that, or once the attacker is dead). Otherwise
     /// both keys go, a copy read from loaded data included. A player attacker
     /// is not written. This is not `baseTick`'s cleanup itself, the AI's
-    /// record, `#no_anger`, or reading the keys back.
+    /// record or `#no_anger`; `persist/last_hurt_by_mob.rs` reads the keys back.
     pub(super) fn put_last_hurt_by_mob(&self, m: &horizon_client::mobs::Mob, tag: &mut Tag) {
         let Tag::Compound(c) = tag else { return };
         let since = i64::from(m.age) - i64::from(m.ai.last_hurt_by_time);

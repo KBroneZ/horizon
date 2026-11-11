@@ -153,9 +153,14 @@ fn the_saved_hurt_by_mob_follows_the_live_record_only() {
     let a = game.mobs[a_index].id;
     // No record, no raw copy: nothing.
     assert_eq!(fields(&mut game, victim), (None, None), "no record");
-    // A raw copy from the summon, no live record: both keys go.
+    // Read from the summon's data (`readAdditionalSaveData`): the live record.
     let echo = index(&mut game, ECHO);
-    assert_eq!(fields(&mut game, echo), (None, None), "stale raw copy");
+    assert_eq!(game.mobs[echo].ai.last_hurt_by, Some(Who::Mob(a)));
+    assert_eq!(
+        fields(&mut game, echo),
+        (Some(Tag::IntArray(vec![24724, 0, 0, 2])), Some(Tag::Int(0))),
+        "read from the summon"
+    );
     // A live record of a resident mob: both keys, at 100 ticks still.
     let age = game.mobs[victim].age as i32;
     game.mobs[victim].ai.last_hurt_by = Some(Who::Mob(a));
@@ -188,4 +193,30 @@ fn the_saved_hurt_by_mob_follows_the_live_record_only() {
     game.mobs[ai].health = 0.0;
     assert!(!game.mobs[ai].alive());
     assert_eq!(fields(&mut game, victim), (None, None), "dead attacker");
+}
+
+/// `LivingEntity.readAdditionalSaveData`: the timestamp is `tickCount -
+/// ticks_since_last_hurt_by_mob`; a UUID no mob in the level has reads as no
+/// record.
+#[test]
+#[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+fn a_summoned_mob_reads_who_hurt_it_and_how_long_ago() {
+    let mut game = game();
+    assert!(game.run_command(
+        "summon pig 8.5 100 12.5 {NoAI:1b,PersistenceRequired:1b,UUID:[I;24724,0,0,5],last_hurt_by_mob:[I;24724,0,0,3],ticks_since_last_hurt_by_mob:30}"
+    ));
+    assert!(game.run_command(
+        "summon pig 12.5 100 12.5 {NoAI:1b,PersistenceRequired:1b,UUID:[I;24724,0,0,6],last_hurt_by_mob:[I;1,2,3,4]}"
+    ));
+    let read = index(&mut game, "00006094-0000-0000-0000-000000000005");
+    assert_eq!(
+        fields(&mut game, read),
+        (
+            Some(Tag::IntArray(vec![24724, 0, 0, 3])),
+            Some(Tag::Int(30))
+        )
+    );
+    let unknown = index(&mut game, "00006094-0000-0000-0000-000000000006");
+    assert_eq!(game.mobs[unknown].ai.last_hurt_by, None);
+    assert_eq!(fields(&mut game, unknown), (None, None));
 }
