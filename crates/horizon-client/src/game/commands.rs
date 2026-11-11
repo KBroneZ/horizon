@@ -2433,6 +2433,9 @@ impl Game<'_> {
         .flatten();
         let mut context = self.who_context(None, None);
         context.living = matches!(t, Target::Stand(_));
+        if let Target::Stand(id) = t {
+            context.source_uuid = self.persist.uuid_of(id);
+        }
         if let Target::Item(id) = t {
             context.dampens = self.dropped.iter().find(|i| i.id == id).is_some_and(|i| {
                 self.res
@@ -2465,9 +2468,6 @@ impl Game<'_> {
                         );
                     }
                     m.health = 0.0;
-                    if m.death_time == 0 {
-                        m.death_time = 1;
-                    }
                     killed = alive.then(|| m.clone());
                 }
                 // The hit runs LivingEntity.die before the command returns:

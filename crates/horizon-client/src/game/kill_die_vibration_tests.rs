@@ -152,3 +152,39 @@ fn a_killed_mob_posts_its_death_before_the_command_returns() {
     let _ = deaths(&mut game, |g| g.tick_creature_entities().unwrap());
     assert_eq!(porkchops(&game), 1, "and only once");
 }
+
+#[test]
+#[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+fn a_killed_mobs_death_time_starts_in_its_own_tick() {
+    let mut game = game();
+    let pig = game
+        .mobs
+        .iter()
+        .find(|m| m.species() == horizon_client::mobs::Species::Pig)
+        .unwrap()
+        .id;
+    let death_time = |g: &Game<'_>| g.mobs.iter().find(|m| m.id == pig).unwrap().death_time;
+    assert!(run(&mut game, &format!("kill {PIG}")).0);
+    // `LivingEntity.kill` leaves `deathTime` at 0; `tickDeath` counts it.
+    assert_eq!(death_time(&game), 0, "DeathTime right after /kill");
+    game.tick_creature_entities().unwrap();
+    assert_eq!(death_time(&game), 1, "DeathTime after one tick");
+}
+
+#[test]
+#[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+fn a_killed_stands_vibration_names_the_stand_as_its_source() {
+    let mut game = game();
+    assert!(game.run_command("summon armor_stand 10.5 100 8.5 {NoGravity:1b,UUID:[I;593,0,0,2]}"));
+    assert!(run(&mut game, "kill 00000251-0000-0000-0000-000000000002").0);
+    let (_, said) = run(&mut game, "data get block 8 100 8 listener.selector.event");
+    let said = said.concat();
+    assert!(said.contains("minecraft:entity_die"), "{said}");
+    // `VibrationInfo.source` is the stand's UUID, as for a mob.
+    let (_, said) = run(
+        &mut game,
+        "data get block 8 100 8 listener.selector.event.source",
+    );
+    let said = said.concat();
+    assert!(said.contains("[I; 593, 0, 0, 2]"), "{said}");
+}
