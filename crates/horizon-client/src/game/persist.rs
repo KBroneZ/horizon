@@ -1136,8 +1136,8 @@ impl Game<'_> {
             }
         }
         let id = m.id;
-        self.push_loaded_mob(m, &tag);
         self.remember(id, Some(uuid.unwrap_or(fresh)), tag);
+        self.push_loaded_mob(m);
         if finalize {
             self.enchant_spawn_equipment(id);
             self.halloween_spawn_head(id);
