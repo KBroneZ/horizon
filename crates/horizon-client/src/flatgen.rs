@@ -363,6 +363,13 @@ impl ChunkGenerator for FlatTerrain {
     fn finish(&self, proto: crate::streaming::Proto) -> Chunk {
         *proto.downcast::<Chunk>().expect("flat terrain proto")
     }
+    /// The proto chunk is already a finished column: the neighbour a final column
+    /// lights against past the area, as vanilla lights against FEATURES neighbours.
+    /// Without it `Streaming::light_region` sends the same `Job::LightView` out
+    /// again and again (#15557).
+    fn light_view(&self, proto: &crate::streaming::Proto) -> Option<Chunk> {
+        proto.downcast_ref::<Chunk>().cloned()
+    }
 }
 
 #[cfg(test)]
@@ -462,6 +469,38 @@ mod tests {
         assert_eq!(block(&floor, [8, -61, 8]), "minecraft:cobblestone");
     }
 
+    /// A flat world's proto chunk past the area is a neighbour to light against: its light view
+    /// is the column itself, so `Streaming` never sends a `Job::LightView` that comes back empty
+    /// (#15557).
+    #[test]
+    fn a_proto_chunk_is_its_own_light_view() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../.local/horizon-client")
+            .join(horizon_core::VANILLA_VERSION);
+        if !root.join("movement-properties.nbt").exists() {
+            return;
+        }
+        let assets = crate::assets::Assets::load(&root).unwrap();
+        let biomes = crate::biome::Biomes::load(&root).unwrap();
+        let terrain = FlatTerrain::from_settings(
+            &flat_world(
+                "minecraft:plains",
+                false,
+                &[("minecraft:bedrock", 1), ("minecraft:stone", 2)],
+            ),
+            assets.registry,
+            &biomes,
+            LevelShape::OVERWORLD,
+        )
+        .unwrap();
+        let proto = terrain.proto(&mut (), 3, -2);
+        let view = terrain.light_view(&proto).expect("a flat proto has a light view");
+        let column = terrain.finish(proto);
+        assert_eq!((view.x, view.z), (3, -2));
+        for y in [-64, -63, -62, -61] {
+            assert_eq!(view.block(48, y, -32), column.block(48, y, -32), "y {y}");
+        }
+    }
     #[test]
     fn adjusted_generation_settings_keep_the_biome_features_outside_structures() {
         let steps: Vec<Vec<String>> = (0..11).map(|step| vec![format!("f{step}")]).collect();

@@ -103,6 +103,13 @@ impl ChunkGenerator for DebugTerrain {
     fn finish(&self, proto: crate::streaming::Proto) -> Chunk {
         *proto.downcast::<Chunk>().expect("debug terrain proto")
     }
+    /// The proto chunk is already a finished column: the neighbour a final column
+    /// lights against past the area, as vanilla lights against FEATURES neighbours.
+    /// Without it `Streaming::light_region` sends the same `Job::LightView` out
+    /// again and again (#15557).
+    fn light_view(&self, proto: &crate::streaming::Proto) -> Option<Chunk> {
+        proto.downcast_ref::<Chunk>().cloned()
+    }
 }
 
 #[cfg(test)]
