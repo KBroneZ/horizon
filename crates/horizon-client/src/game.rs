@@ -471,6 +471,7 @@ mod transient_blocks;
 mod trial_spawner;
 mod trial_visuals;
 mod trident;
+mod turn;
 mod tutorial;
 mod tweaks;
 mod ui_control;
@@ -2283,6 +2284,8 @@ struct Game<'a> {
     view_at: [u32; 2],
     /// Splitscreen: what it draws over this player's view (its badge, questions, notices).
     split_hud: split::Hud,
+    /// What this game swaps in and out when it shares its thread with other players' games.
+    turn: turn::Turn,
     focused: bool,
     /// The visible window of a game an agent started, until a person focuses it: it opened
     /// without the focus, and its pointer grab stays inside the game as `--offscreen`'s does,
@@ -11478,6 +11481,7 @@ impl<'a> Game<'a> {
             keyboard_mouse: true,
             view_at: [0, 0],
             split_hud: Default::default(),
+            turn: Default::default(),
             focused: true,
             unclaimed_window: false,
             focus_after_run: None,

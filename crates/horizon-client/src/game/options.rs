@@ -92,8 +92,8 @@ impl Game<'_> {
     /// This player's `options.txt`: in the game folder, or in `--player-dir` when several
     /// players share one (`logging::set_player_dir`).
     pub(super) fn options_path() -> std::path::PathBuf {
-        // Splitscreen's second player has its own options (`split::options_path`).
-        if let Some(path) = super::split::options_path() {
+        // Splitscreen's second player has its own options (`turn::options_path`).
+        if let Some(path) = super::turn::options_path() {
             return path;
         }
         horizon_client::logging::player_dir().join("options.txt")
