@@ -12,7 +12,7 @@ use horizon_platform::hooks::{self, Hooks};
 use horizon_platform::{pages, settings};
 
 /// Every Horizon part in the game, in the order its hooks run.
-const PARTS: [&dyn Hooks; 7] = [
+const PARTS: [&dyn Hooks; 8] = [
     // The anonymous "I'm playing" ping.
     &horizon_heartbeat::HOOKS,
     // Play with Friends: `friend:` addresses join through its tunnel.
@@ -27,6 +27,8 @@ const PARTS: [&dyn Hooks; 7] = [
     &horizon_pregen::HOOKS,
     // Far terrain planned finer where a zoom looks (`lodZoomDetail`).
     &horizon_zoom_detail::HOOKS,
+    // Open and Share for saved performance captures.
+    &horizon_perf_share::HOOKS,
 ];
 /// Their settings, in the player's settings files.
 const STORES: [&dyn settings::Store; 4] = [
