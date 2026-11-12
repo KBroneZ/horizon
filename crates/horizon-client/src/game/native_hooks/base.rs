@@ -1,5 +1,5 @@
 use super::*;
-use mod_api::{ClockAdjustment, ModBlockEntity};
+use mod_api::ModBlockEntity;
 impl GameLevel<'_> {
     /// Initial saved data for a declared block entity (`EntityBlock.newBlockEntity`),
     /// fired inside the write that creates it (`LevelChunk.setBlockState`), on
