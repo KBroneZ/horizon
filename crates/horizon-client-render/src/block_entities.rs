@@ -140,12 +140,11 @@ pub struct BlockEntities {
 }
 
 /// A removed block entity held for the `block_drops` event of its break: its position, the
-/// identity it had, the block state it belonged to and its data.
+/// identity it had and its saved data, read before the removal took its `CustomName` away.
 pub struct Broken {
     pub pos: Pos,
     pub generation: u64,
-    pub state: u32,
-    pub entity: BlockEntity,
+    pub data: horizon_core::nbt::Compound,
 }
 
 /// Storage-owned identity passed to attachment residency observers.
@@ -679,18 +678,21 @@ impl BlockEntities {
         }
         entity
     }
-    /// Keep `entity`, just removed from `pos` where it had `generation` under block state `state`,
-    /// readable through [`Self::broken`] until [`Self::release_broken`]. The map and the
-    /// generations do not know it: a handle to it answers reads, and nothing else.
-    pub fn hold_broken(&mut self, pos: Pos, generation: u64, state: u32, entity: BlockEntity) {
+    /// Keep `data`, the saved data (with its `CustomName`) of the block entity just removed from
+    /// `pos`, where it had `generation`, readable through [`Self::broken`] until
+    /// [`Self::release_broken`]. The map and the generations do not know it: a handle to it
+    /// answers reads, and nothing else. One slot: a second hold replaces the first. Listeners of
+    /// the event it serves read through a shared host and cannot start another break, so the two
+    /// do not nest today; a hook that could would hold per break instead.
+    pub fn hold_broken(&mut self, pos: Pos, generation: u64, data: horizon_core::nbt::Compound) {
         self.broken = Some(Broken {
             pos,
             generation,
-            state,
-            entity,
+            data,
         });
     }
-    /// The block entity [`Self::hold_broken`] holds, if it is the one at `pos` with `generation`.
+    /// The data [`Self::hold_broken`] holds, if it is that of the block entity at `pos` with
+    /// `generation`.
     pub fn broken(&self, pos: &Pos, generation: u64) -> Option<&Broken> {
         self.broken
             .as_ref()
@@ -703,7 +705,7 @@ impl BlockEntities {
             .filter(|held| held.pos == *pos)
             .map(|held| held.generation)
     }
-    /// Drop the held block entity: every handle to it is stale from now on.
+    /// Drop the held data: every handle to it is stale from now on.
     pub fn release_broken(&mut self) {
         self.broken = None;
     }

@@ -142,47 +142,57 @@ impl Game<'_> {
     }
 }
 
+/// A player's break, before the removal: the block entity (for what the drops copy from it),
+/// and for the `block_drops` event its identity and saved data with the `CustomName`, which the
+/// removal clears from the level.
+pub(in crate::game) type LiveBlockEntity = (
+    horizon_client::containers::BlockEntity,
+    Option<(Compound, u64)>,
+);
+
 impl Game<'_> {
-    /// The block entity at `key` with its identity, as a player's break finds it before the
-    /// removal takes it out of the world.
+    /// The block entity at `key` as a player's break finds it before the removal takes it out of
+    /// the world. The saved data is read only when a `block_drops` listener will want it.
     pub(in crate::game) fn live_block_entity(
         &self,
         key: (i32, i32, i32),
-    ) -> Option<(horizon_client::containers::BlockEntity, u64)> {
+        block: &str,
+    ) -> Option<LiveBlockEntity> {
         let entity = self.world.block_entities.get(&key)?.clone();
-        Some((entity, self.world.block_entities.generation(&key)?))
+        let view = (self.native_authoritative()
+            && mod_api::__private::listened(mod_api::HookId::BlockDrops))
+        .then(|| {
+            let data = self.saved_block_entity_data(key, &entity, block)?;
+            Some((data, self.world.block_entities.generation(&key)?))
+        })
+        .flatten();
+        Some((entity, view))
     }
-    /// `Block.dropResources` for a player's break (`block_dropped`), with the block entity the
-    /// removal took (`live`, from [`Self::live_block_entity`]) held readable for the
-    /// `block_drops` event (`BlockDropsEvent.getBlockEntity`) and released after it: handles to
-    /// it are stale from then on. `at` is the position, the state after the removal and the
-    /// state the block had; `who` the breaker's UUID, their tool and the held block entity;
-    /// `loot` the stacks and an experience override.
+    /// `Block.dropResources` for a player's break (`block_dropped`), with the data of the block
+    /// entity the removal took (`live`, from [`Self::live_block_entity`]) held readable for the
+    /// `block_drops` event (`BlockDropsEvent.getBlockEntity`) and released after it, also when a
+    /// listener panics: handles to it are stale from then on. `at` is the position and the state
+    /// after the removal; `who` the breaker's UUID, their tool and the held block entity; `loot`
+    /// the stacks and an experience override.
     pub(in crate::game) fn player_block_dropped(
         &mut self,
-        at: ([i32; 3], BlockStateId, BlockStateId),
-        who: (
-            Option<u128>,
-            Option<&ItemStack>,
-            Option<(horizon_client::containers::BlockEntity, u64)>,
-        ),
+        at: ([i32; 3], BlockStateId),
+        who: (Option<u128>, Option<&ItemStack>, Option<LiveBlockEntity>),
         loot: (Vec<ItemStack>, Option<u32>),
     ) -> crate::game::spill::BlockDrops {
-        let ([x, y, z], state, was) = at;
+        let ([x, y, z], state) = at;
         let (breaker, tool, live) = who;
-        let held = (self.native_authoritative()
-            && mod_api::__private::listened(mod_api::HookId::BlockDrops))
-        .then_some(live)
-        .flatten();
-        if let Some((entity, generation)) = held {
+        if let Some((data, generation)) = live.and_then(|(_, view)| view) {
             self.world
                 .block_entities
-                .hold_broken((x, y, z), generation, was.0, entity);
+                .hold_broken((x, y, z), generation, data);
         }
-        let dropped = self.with_level(|_, level, _| {
-            level.block_dropped(BlockPos::new(x, y, z), state, breaker, tool, loot.0, loot.1)
-        });
+        let dropped = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.with_level(|_, level, _| {
+                level.block_dropped(BlockPos::new(x, y, z), state, breaker, tool, loot.0, loot.1)
+            })
+        }));
         self.world.block_entities.release_broken();
-        dropped
+        dropped.unwrap_or_else(|panic| std::panic::resume_unwind(panic))
     }
 }

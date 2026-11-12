@@ -5862,7 +5862,7 @@ impl Game<'_> {
         } else {
             self.loot_block_entity(pos, &facts.name)
         };
-        let live = self.live_block_entity(key);
+        let live = self.live_block_entity(key, &facts.name);
         if let Some((entity, _)) = &live {
             self.pending
                 .record_from(&self.world, pos, entity, &facts.name);
@@ -5900,7 +5900,7 @@ impl Game<'_> {
                 // experience, with the mods' say between the two.
                 let breaker = Some(self.native_acting_id());
                 let dropped = self.player_block_dropped(
-                    (pos, state, broken),
+                    (pos, state),
                     (breaker, held.as_ref(), live),
                     (stacks, exp_to_drop),
                 );
