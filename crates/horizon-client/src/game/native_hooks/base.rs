@@ -1,5 +1,5 @@
 use super::*;
-use mod_api::ModBlockEntity;
+use mod_api::{ClockAdjustment, ModBlockEntity};
 impl GameLevel<'_> {
     /// Initial saved data for a declared block entity (`EntityBlock.newBlockEntity`),
     /// fired inside the write that creates it (`LevelChunk.setBlockState`), on
@@ -2931,30 +2931,20 @@ impl Game<'_> {
         self.fire_lightning_strike(player, pos, cause, cancel);
     }
 
-    /// Enough players have slept through the night in level `dimension`
-    /// and the clock is about to move to the morning (NeoForge's
-    /// `SleepFinishedTimeEvent`, vanilla's `ServerLevel.tick` when it moves
-    /// the clock to `wake_up_from_sleep`). `adjustment` says where the clock
-    /// goes and may be changed: it comes in as
-    /// `Marker(minecraft:wake_up_from_sleep)`, vanilla's own, and a mod may
-    /// set `Absolute`, `Relative` (from `current`, the day time now) or
-    /// another `Marker`; a later mod reads what an earlier one left.
-    /// `new_time` is the morning vanilla resolved, read only, for a mod that
-    /// computes from it. Contract version `2`: in version `1`, `new_time`
-    /// was the value a mod wrote; a time is now written as `Absolute`. The game resolves `adjustment`
-    /// once after every mod: a time before `current`, or a marker the clock
-    /// does not define, is refused, as `setTimeAddition` refuses one, and the
-    /// morning stays. On the server, only when the `advance_time` rule is on;
-    /// `native_time_skip` then hears the jump to the resolved time and may
-    /// still cancel it. The players wake and the weather resets as usual
-    /// either way. Set `canceled` and the clock is left where it is, as
-    /// NeoForge's cancel leaves it: `native_time_skip` is not asked either.
+    /// Enough players slept through the night in level `dimension` and the clock is about to
+    /// move to the morning (NeoForge's `SleepFinishedTimeEvent`). `adjustment` comes in as
+    /// `Marker(minecraft:wake_up_from_sleep)` and a mod may set `Absolute`, `Relative` (from
+    /// `current`) or another marker; `new_time` is the vanilla morning, read only (contract 2: in
+    /// version 1 a mod wrote it). Resolved once after every mod (`game/wake_time.rs`): a time
+    /// before `current`, or a marker the clock lacks, keeps the morning. Only with `advance_time`
+    /// on; `native_time_skip` then hears the jump and may still cancel it. Set `canceled` and
+    /// the clock stays, and `native_time_skip` is not asked.
     pub(in crate::game) fn native_sleep_finished_time(
         &mut self,
         dimension: &str,
         current: i64,
         new_time: i64,
-        adjustment: &mut mod_api::ClockAdjustment,
+        adjustment: &mut ClockAdjustment,
         canceled: &mut bool,
     ) {
         self.fire_sleep_finished_time(dimension, current, new_time, adjustment, canceled);

@@ -351,14 +351,11 @@ For mods that run where the world is simulated: a dedicated server, a LAN host, 
   in NeoForge. A visual-only bolt asks nothing. With no listener the cost is one `listened` check per struck entity.
 - **`native_time_skip(dimension, from, to, cause, cancel)`**: the server clock is about to jump after enough players
   sleep or through `/time set`, `/time add`, or `/time set <marker>`. Set `cancel` to keep the old time.
-- **`native_sleep_finished_time(dimension, current, new_time, adjustment)`**: enough players slept through the night
-  and the `advance_time` rule is on (NeoForge's `SleepFinishedTimeEvent`). `adjustment` is a `ClockAdjustment`: it
-  comes in as `Marker(minecraft:wake_up_from_sleep)` and a mod may set `Absolute`, `Relative` (from `current`) or
-  another `Marker`. `new_time`, read only, is the morning vanilla resolved (contract version 2; in version 1 a mod
-  wrote it). The game resolves `adjustment` once after every mod, so a later mod sees what an earlier one set: a time
-  before `current`, or a marker the clock does not define, is refused and the morning stays. It runs before
-  `native_time_skip`, which hears the jump to the resolved time and may still cancel it; the players wake either way.
-  `level_clock_marker_time(level, marker)` tells when the level's clock next reaches a marker.
+- **`native_sleep_finished_time(dimension, current, new_time, adjustment)`**: enough players slept and `advance_time`
+  is on (NeoForge's `SleepFinishedTimeEvent`). `adjustment`, a `ClockAdjustment`, starts as vanilla's
+  `wake_up_from_sleep` marker; a mod may set `Absolute`, `Relative` or another `Marker`, read with
+  `level_clock_marker_time`. `new_time` is the vanilla morning, read only (contract 2). Resolved after every mod; a time
+  before `current` or an unknown marker keeps the morning. `native_time_skip` then hears the jump and may cancel it.
 - **`native_world_border_bounds_changed()`**: `/worldborder set` or `/worldborder add` changed the border size or started a timed size change.
 - **`native_world_border_center_changed()`**: `/worldborder center` moved the border center. It hears successful commands only.
 - **`native_spawn_change(pos, angle)`**: `/setworldspawn` moved the world's spawn point, after its position and rotation are applied.
