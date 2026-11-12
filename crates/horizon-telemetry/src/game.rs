@@ -14,7 +14,7 @@ use std::time::Duration;
 use horizon_platform::hooks::{self, Hooks, Milestone, PlayedFrame, WorldLeft};
 
 use crate::payload::{Crash, Display, Perf, Settings, System, Timings};
-use horizon_platform::system::scrub::Scrubber;
+use crate::scrub::Scrubber;
 use crate::{Item, Payload, Source, outbox};
 
 /// A session shorter than this says too little to keep.
