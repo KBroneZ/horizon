@@ -379,6 +379,13 @@ pub trait LevelsBackend {
     /// without a default clock, like the Nether, is None, as is a stale handle and a client.
     #[access(WorldOnly)]
     fn level_clock_time(&self, level: LevelRef) -> Option<i64>;
+    /// Side: server.
+    /// The next clock time after [`level_clock_time`](Self::level_clock_time) at which the
+    /// level's own clock reaches `marker`, a time marker of its timelines (as `/time set <marker>`
+    /// moves to it). None for a marker the clock does not define, a level without a default clock,
+    /// a stale handle and a client.
+    #[access(WorldOnly)]
+    fn level_clock_marker_time(&self, level: LevelRef, marker: &Identifier) -> Option<i64>;
     /// Side: both.
     /// `FluidState.getFlow` at `pos`: the current that pushes an entity there, after the
     /// `fluid_flow` hook, as entities feel it. Zero where no fluid flows. None as for

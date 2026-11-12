@@ -893,6 +893,17 @@ impl Game<'_> {
         self.dimension_type_of(dim).default_clock.as_ref()?;
         Some(self.command_clock_time(&self.level_clock_name(dim)))
     }
+    /// When the level's own clock next reaches `marker` (`/time set <marker>`'s resolution).
+    pub(super) fn level_clock_marker_time(
+        &self,
+        level: LevelRef,
+        marker: &mod_api::Identifier,
+    ) -> Option<i64> {
+        let now = self.level_clock_time(level)?;
+        let clock = self.level_clock_name(super::Dim::from_id(level.dimension_id()));
+        let marker = format!("{}:{}", marker.namespace(), marker.path());
+        self.clock_marker_time(&clock, &marker, now)
+    }
 }
 
 /// `Level.isInWorldBoundsHorizontal`: x and z inside the 30,000,000-block limit.

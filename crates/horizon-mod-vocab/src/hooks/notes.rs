@@ -351,11 +351,14 @@ For mods that run where the world is simulated: a dedicated server, a LAN host, 
   in NeoForge. A visual-only bolt asks nothing. With no listener the cost is one `listened` check per struck entity.
 - **`native_time_skip(dimension, from, to, cause, cancel)`**: the server clock is about to jump after enough players
   sleep or through `/time set`, `/time add`, or `/time set <marker>`. Set `cancel` to keep the old time.
-- **`native_sleep_finished_time(dimension, current, new_time)`**: enough players slept through the night and the
-  `advance_time` rule is on (NeoForge's `SleepFinishedTimeEvent`). `new_time` comes in as the next morning's day time;
-  set another to wake everyone then. A time before `current` is refused and the morning stays; the check runs once after
-  every mod, so a later mod sees the value an earlier one set. It runs before `native_time_skip`, which hears the jump
-  to the time chosen here and may still cancel it; the players wake either way.
+- **`native_sleep_finished_time(dimension, current, new_time, adjustment)`**: enough players slept through the night
+  and the `advance_time` rule is on (NeoForge's `SleepFinishedTimeEvent`). `adjustment` is a `ClockAdjustment`: it
+  comes in as `Marker(minecraft:wake_up_from_sleep)` and a mod may set `Absolute`, `Relative` (from `current`) or
+  another `Marker`. `new_time`, read only, is the morning vanilla resolved (contract version 2; in version 1 a mod
+  wrote it). The game resolves `adjustment` once after every mod, so a later mod sees what an earlier one set: a time
+  before `current`, or a marker the clock does not define, is refused and the morning stays. It runs before
+  `native_time_skip`, which hears the jump to the resolved time and may still cancel it; the players wake either way.
+  `level_clock_marker_time(level, marker)` tells when the level's clock next reaches a marker.
 - **`native_world_border_bounds_changed()`**: `/worldborder set` or `/worldborder add` changed the border size or started a timed size change.
 - **`native_world_border_center_changed()`**: `/worldborder center` moved the border center. It hears successful commands only.
 - **`native_spawn_change(pos, angle)`**: `/setworldspawn` moved the world's spawn point, after its position and rotation are applied.
@@ -2636,7 +2639,7 @@ registration path.
 
 - The server completed a world save cycle: `native_world_saved(wait)` reports whether chunk writes were flushed before returning.
 
-- The time players wake at after sleeping, as NeoForge's `SleepFinishedTimeEvent`: `native_sleep_finished_time(dimension, current, new_time)` runs on the server once enough players have slept and the `advance_time` rule is on, before the clock moves. `new_time` comes in as the next morning and a mod may change it; a time before `current` is refused. `native_time_skip` then hears the jump to the chosen time.
+- The time players wake at after sleeping, as NeoForge's `SleepFinishedTimeEvent`: `native_sleep_finished_time(dimension, current, new_time, adjustment)` runs on the server once enough players have slept and the `advance_time` rule is on, before the clock moves. `adjustment` (a `ClockAdjustment`: `Absolute`, `Relative` or `Marker`, starting as vanilla's `wake_up_from_sleep` marker) says where the clock goes and a mod may change it; `new_time` is the vanilla morning, read only. A time before `current`, or an undefined marker, is refused. `native_time_skip` then hears the jump to the chosen time.
 
 - A shift-click in a mod container's menu routed by the mod, `AbstractContainerMenu.quickMoveStack`: `native_menu_quick_move(pos, entity, container_slots, slot, stack, handled)` runs on the server before the game's own routing, for a mod container on a vanilla menu type or its own menu type. The mod takes what it moves out of `stack` and sets `handled`; the slot keeps the rest and the client gets the menu again.
 

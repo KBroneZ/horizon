@@ -2934,25 +2934,30 @@ impl Game<'_> {
     /// Enough players have slept through the night in level `dimension`
     /// and the clock is about to move to the morning (NeoForge's
     /// `SleepFinishedTimeEvent`, vanilla's `ServerLevel.tick` when it moves
-    /// the clock to `wake_up_from_sleep`): `new_time` comes in as the next
-    /// morning's day time and may be changed to wake everyone at another
-    /// time. A time before `current` (the day time now) is refused, as
-    /// `setTimeAddition` refuses one, and the morning stays. Unlike
-    /// NeoForge, which refuses a bad value as it is set, the check runs once
-    /// after every mod, so a later mod sees the value an earlier one left.
-    /// On the server, only when the `advance_time` rule is on;
-    /// `native_time_skip` then hears the jump to the time chosen here and
-    /// may still cancel it. The players wake and the weather resets as
-    /// usual either way. Set `canceled` and the clock is left where it is, as
+    /// the clock to `wake_up_from_sleep`). `adjustment` says where the clock
+    /// goes and may be changed: it comes in as
+    /// `Marker(minecraft:wake_up_from_sleep)`, vanilla's own, and a mod may
+    /// set `Absolute`, `Relative` (from `current`, the day time now) or
+    /// another `Marker`; a later mod reads what an earlier one left.
+    /// `new_time` is the morning vanilla resolved, read only, for a mod that
+    /// computes from it. Contract version `2`: in version `1`, `new_time`
+    /// was the value a mod wrote; a time is now written as `Absolute`. The game resolves `adjustment`
+    /// once after every mod: a time before `current`, or a marker the clock
+    /// does not define, is refused, as `setTimeAddition` refuses one, and the
+    /// morning stays. On the server, only when the `advance_time` rule is on;
+    /// `native_time_skip` then hears the jump to the resolved time and may
+    /// still cancel it. The players wake and the weather resets as usual
+    /// either way. Set `canceled` and the clock is left where it is, as
     /// NeoForge's cancel leaves it: `native_time_skip` is not asked either.
     pub(in crate::game) fn native_sleep_finished_time(
         &mut self,
         dimension: &str,
         current: i64,
-        new_time: &mut i64,
+        new_time: i64,
+        adjustment: &mut mod_api::ClockAdjustment,
         canceled: &mut bool,
     ) {
-        self.fire_sleep_finished_time(dimension, current, new_time, canceled);
+        self.fire_sleep_finished_time(dimension, current, new_time, adjustment, canceled);
     }
 
     /// The overworld clock is about to jump, from sleep or `/time`. Set

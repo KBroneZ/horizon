@@ -1887,6 +1887,20 @@ impl Game<'_> {
     }
     /// `ServerClockManager.getTotalTicks` of `clock`: the active one's is the world's day time,
     /// another's the table's (0 for a clock the world has not met).
+    /// The next time after `total` at which `clock` reaches `marker`, as `/time set <marker>`
+    /// resolves it. Markers are read for the Overworld's clock only, as that command reads them;
+    /// None for any other clock and an unknown marker.
+    pub(in crate::game) fn clock_marker_time(
+        &self,
+        clock: &str,
+        marker: &str,
+        total: i64,
+    ) -> Option<i64> {
+        (clock == OVERWORLD_CLOCK)
+            .then(|| self.ui.markers.get(marker))
+            .flatten()
+            .map(|m| m.resolve(total))
+    }
     pub(in crate::game) fn command_clock_time(&self, clock: &str) -> i64 {
         if clock == self.active_clock() {
             self.world.day_time
