@@ -18,6 +18,31 @@ impl GameLevel<'_> {
         {
             return None;
         }
+        let (block_entity, breaker) = self.drop_event_refs(pos, breaker);
+        let mut experience = None;
+        self.native_exp_drop(super::fire::ExpDropCall {
+            dimension: self.dimension,
+            pos,
+            state,
+            block_entity,
+            breaker,
+            tool,
+            experience: &mut experience,
+        });
+        experience.map(|value| value.clamp(0, 32767) as u32)
+    }
+}
+
+impl GameLevel<'_> {
+    /// The block entity at `pos` and the entity that broke it, as a block's drop and experience
+    /// hooks give them (`BlockDropsEvent.getBlockEntity` and `getBreaker`): the block entity with
+    /// its generation, the player's entity for a player's break (`breaker`, their UUID), or the
+    /// mob in `drop_entity` while its break at this position runs.
+    pub(in crate::game) fn drop_event_refs(
+        &self,
+        pos: BlockPos,
+        breaker: Option<u128>,
+    ) -> (Option<mod_api::BlockEntityRef>, Option<mod_api::EntityRef>) {
         let at = [pos.x, pos.y, pos.z];
         let block_entity = self.api_level.and_then(|level| {
             self.world.block_entities.get(&(pos.x, pos.y, pos.z))?;
@@ -37,17 +62,7 @@ impl GameLevel<'_> {
             self.drop_entity
                 .filter(|_| self.drop_breaker_at == Some(pos))
         };
-        let mut experience = None;
-        self.native_exp_drop(super::fire::ExpDropCall {
-            dimension: self.dimension,
-            pos,
-            state,
-            block_entity,
-            breaker,
-            tool,
-            experience: &mut experience,
-        });
-        experience.map(|value| value.clamp(0, 32767) as u32)
+        (block_entity, breaker)
     }
 }
 
