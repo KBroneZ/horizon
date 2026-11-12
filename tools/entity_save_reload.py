@@ -15,7 +15,7 @@ when a probe finds no entity or reports an error. Run files stay under `.local/s
 
     test_<x>_save_reload_parity.py [--binary PATH] [--keep]
 
-`--binary` is a built `horizon-client` (default: `cargo build --profile fast -p horizon-client`).
+`--binary` is a built `horizon-client` (default: `cargo build --profile fast -p horizon-game`).
 """
 import argparse
 import json

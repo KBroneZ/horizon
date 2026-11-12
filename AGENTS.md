@@ -60,7 +60,7 @@ waiting in loops, and work someone else had already done. Tests were a small par
   `python3 tools/port_ledger.py where Class.method`. Read the function you change and its callers, not whole
   files.
 - **Compile cheaply while you work.** `cargo check -p <crate>` after an edit. Clippy, fmt and tests run once, at
-  the end, through `pr_ready.py`. `cargo clippy -p horizon-client` and `cargo build -p horizon-client` are the
+  the end, through `pr_ready.py`. `cargo clippy -p horizon-client` and `cargo build -p horizon-game` are the
   slowest commands here: never after every edit, and build the game only when you need to run it.
 - **Don't wait in loops.** Start a long command in the background and carry on, or wait for it once. No
   `sleep` or `until grep` polling of builds, harnesses or CI.
