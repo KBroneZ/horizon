@@ -411,6 +411,19 @@ pub trait PlayersBackendMut {
     /// Refuses text deeper than 512 component nodes before applying any changes.
     fn player_action_bar(&mut self, player: PlayerRef, line: Text) -> Result<bool, TextFormError>;
     /// Side: server.
+    /// Disconnects the player with `reason` on their disconnect screen
+    /// (NeoForge's `ICommonPacketListener.disconnect(Component)`): vanilla's disconnect packet
+    /// goes out now and the connection closes when the server next handles its players' leaving,
+    /// so the calling hook finishes first. The server log, the `kick` event and
+    /// `player_logged_out` follow as for `/kick`. Unlike `/kick`, it needs no published world.
+    /// Works inside a player's hook for the acting player too. False for a stale handle, a
+    /// fake player, a player who isn't connected and the single-player world's owner (an
+    /// integrated server can't disconnect its own host).
+    #[access(WorldOnly)]
+    /// Refuses text deeper than 512 component nodes before applying any changes.
+    fn player_disconnect(&mut self, player: PlayerRef, reason: Text)
+    -> Result<bool, TextFormError>;
+    /// Side: server.
     /// The lines over and under that player's list of players (Tab):
     /// `ClientboundTabListPacket`, an empty text for none. False when they
     /// aren't on.
