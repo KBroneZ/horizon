@@ -299,7 +299,7 @@ impl Milestone {
     }
 }
 
-/// What [`Hooks::frame`] gets.
+/// What [`Hooks::played_frame`] gets.
 pub struct PlayedFrame<'a> {
     /// How long the frame took.
     pub ms: f32,

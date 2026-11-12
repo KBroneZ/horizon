@@ -288,7 +288,7 @@ build pays nothing.
 The hooks today: `started` (once, when someone plays: not a dedicated server, a benchmark or an automated run),
 `published` (the world opened to or closed from LAN or friends, on change), `shutdown` (the window closed, the
 world saved), and the play session's: `startup` (core-ready, rest-ready, the title's first frame, once each),
-`wants_frame_steps` (asked once: time the render thread's steps), `world_shown` (a world's first frame), `frame`
+`wants_frame_steps` (asked once: time the render thread's steps), `world_shown` (a world's first frame), `played_frame`
 (every frame played), `world_left` (the session's end, with its settings), `display` (the screen the window is on)
 `crashed` (each crash, before its report is saved), and `knows_benchmark` and `benchmark` (`--benchmark SCENARIO`:
 the part that knows the scenario drives the game through horizon-ctl's command queue); and `tunnel` (the resolver
