@@ -653,9 +653,9 @@ impl Item {
             UiSoundReserve => return None,
             ChatIndicator => ChatAnimation,
             Pvp(o) => return o.parent().map(Pvp),
-            Fullbright | DynamicLights | OwnNameTag | HideBlockParticles
-            | AutoReconnect | NoAi | AgentControl | ReproKeys | Splitscreen | ChatAnimation
-            | WheelCyclesSettings | MusicPage | PackBrowser | Pregen => {
+            Fullbright | DynamicLights | OwnNameTag | HideBlockParticles | AutoReconnect | NoAi
+            | AgentControl | ReproKeys | Splitscreen | ChatAnimation | WheelCyclesSettings
+            | MusicPage | PackBrowser | Pregen => {
                 return None;
             }
         })
@@ -748,7 +748,6 @@ impl Item {
             Item::PackBrowser => e.pack_browser,
             Item::Pregen => e.pregen,
             Item::Pvp(o) => return o.switch(&e.pvp),
-            _ => return None,
         })
     }
     /// The value of the other items, as their button shows it.
