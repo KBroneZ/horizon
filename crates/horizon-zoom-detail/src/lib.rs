@@ -62,6 +62,9 @@ impl Store for Setting {
     fn owns(&self, key: &str) -> bool {
         key == KEY
     }
+    fn defaults(&self) {
+        HOOKS.set_enabled(false);
+    }
     fn load(&self, _key: &str, value: &str) {
         if let Ok(on) = value.parse() {
             HOOKS.set_enabled(on);
@@ -100,6 +103,16 @@ mod tests {
         assert!(HOOKS.enabled());
         SETTING.load("lodZoomDetail", "false");
         assert!(SETTING.is_default());
+        // Seat 1 switches to a profile whose file has no `lodZoomDetail`: the load starts from
+        // the default, and seat 0 keeps its own.
+        SETTING.load("lodZoomDetail", "true");
         set_seat(0);
+        SETTING.load("lodZoomDetail", "true");
+        set_seat(1);
+        SETTING.defaults();
+        assert!(!HOOKS.far_terrain_zoom_detail() && SETTING.is_default());
+        set_seat(0);
+        assert!(HOOKS.enabled(), "P1's stays");
+        SETTING.defaults();
     }
 }

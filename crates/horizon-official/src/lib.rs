@@ -12,7 +12,7 @@ use horizon_platform::hooks::{self, Hooks};
 use horizon_platform::{pages, settings};
 
 /// Every Horizon part in the game, in the order its hooks run.
-const PARTS: [&dyn Hooks; 7] = [
+const PARTS: [&dyn Hooks; 8] = [
     // The anonymous "I'm playing" ping.
     &horizon_heartbeat::HOOKS,
     // Play with Friends: `friend:` addresses join through its tunnel.
