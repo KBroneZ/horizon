@@ -1,12 +1,12 @@
 # Built from the repository root: docker build -f crates/horizon-mod-registry/Dockerfile .
 FROM rust:1-slim AS build
 WORKDIR /src
-# The root manifest only for the shared crate's workspace settings (edition, lints).
+# The root manifest only for the shared crates' workspace settings (edition, lints).
 COPY Cargo.toml Cargo.toml
-COPY crates/horizon-mod-package crates/horizon-mod-package
-# horizon-mods' optional dependency: cargo needs its manifest even with the feature off.
-COPY crates/horizon-shader-api crates/horizon-shader-api
-COPY crates/horizon-mod-registry crates/horizon-mod-registry
+# Every crate's sources, though only the registry's own workspace compiles: horizon-mod-package depends on
+# horizon-mod-vocab, whose build script generates the mod API from the game's hook sources
+# (crates/horizon-client/src/game and the crates its hooks name). .dockerignore leaves out build folders.
+COPY crates crates
 RUN cargo build --release --locked --manifest-path crates/horizon-mod-registry/Cargo.toml
 
 FROM debian:stable-slim

@@ -6,6 +6,8 @@
     "watchPatterns": [
       "/crates/horizon-mod-package/**",
       "/crates/horizon-mod-registry/**",
+      "/crates/horizon-mod-vocab/**",
+      "/crates/horizon-mod-api-gen/**",
       "/Cargo.toml"
     ]
   },
