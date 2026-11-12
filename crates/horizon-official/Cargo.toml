@@ -18,6 +18,7 @@ horizon-friends = { path = "../horizon-friends", features = ["game"] }
 horizon-official-servers = { path = "../horizon-official-servers" }
 horizon-discord = { path = "../horizon-discord" }
 horizon-name-tag = { path = "../horizon-name-tag" }
+horizon-pregen = { path = "../horizon-pregen" }
 log = "0.4"
 
 [build-dependencies]

@@ -49,6 +49,10 @@ in Controls, and adding one would put a non-vanilla mapping into `options.txt`.
   needed. `--pregen` still enables it for the whole run. Dedicated servers use their own property.
 - Turning it off hides the command without cancelling an existing task; turn it on again to manage
   that task, or cancel it first. See [pregeneration](pregeneration.md).
+- A Horizon crate, `horizon-pregen`, registered by `horizon-official`: its switch per splitscreen
+  player, its line in `horizon-extras.txt` (same key) and its row in the Extras page's World group.
+  The engine keeps the command and asks `horizon_hooks::Hooks::pregen_command` when a world opens
+  and after a setting changes; the plain executable offers `/pregen` only with `--pregen`.
 
 ### Fullbright (`fullbright`, default off)
 - Displays blocks and entities with a fully bright lightmap, including in dark caves.

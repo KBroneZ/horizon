@@ -112,6 +112,13 @@ pub trait Hooks: Sync {
     fn own_name_tag(&self) -> bool {
         false
     }
+
+    /// Whether this window's own worlds (single-player and hosted LAN) offer `/pregen`, with its
+    /// cheat and permission checks (Horizon's chunk pregeneration). Asked when such a world opens
+    /// and after the player changes a setting; `--pregen` offers it for the whole run anyway.
+    fn pregen_command(&self) -> bool {
+        false
+    }
 }
 
 /// What [`Hooks::get_the_game`] answers. The texts are translation keys of the game's own strings
@@ -373,6 +380,11 @@ pub mod engine {
     /// [`Hooks::own_name_tag`]: whether any hook says so.
     pub fn own_name_tag() -> bool {
         all().iter().any(|hooks| hooks.own_name_tag())
+    }
+
+    /// [`Hooks::pregen_command`]: whether any hook says so.
+    pub fn pregen_command() -> bool {
+        all().iter().any(|hooks| hooks.pregen_command())
     }
 }
 
