@@ -2698,13 +2698,6 @@ impl Game<'_> {
         horizon_client::lan::playerdata::ints_uuid(self.acting_player_uuid())
     }
 
-    /// Whether a native mod keeps the acting player from taking `stack`.
-    pub(super) fn native_pickup_refused(&mut self, stack: &ItemStack) -> bool {
-        let player = self.native_acting_id();
-        let mut canceled = false;
-        self.native_item_picked_up(player, &stack.item, stack.count, &mut canceled);
-        canceled
-    }
     /// Tells the mods of the chunks that came into this level.
     pub(super) fn native_chunks_loaded(&mut self) {
         let loaded = std::mem::take(&mut self.world.loaded_chunks);
@@ -5269,7 +5262,7 @@ pub(super) mod particle_count_tests {
                 .add(&ParticleOptions::simple(ParticleType::Flame), at, [0.0; 3]);
         }
         let bursts = vec![FireworkExplosion::default(); 4];
-        game.particles.fireworks(at, [0.0; 3], bursts, at);
+        game.particles.fireworks(at, [0.0; 3], bursts, at, true);
         let v = Vec3::new(at[0], at[1], at[2]);
         game.add_pickup_toward(Taken::Orb(Box::new(orb(v))), Collector::Player, at);
         game.particles.elder_guardian();

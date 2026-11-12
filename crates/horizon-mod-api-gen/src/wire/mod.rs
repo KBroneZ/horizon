@@ -64,6 +64,7 @@ pub(super) const IMPORTS: &[&str] = &[
     "EnchantmentDamageEffects",
     "PoiTypeExtensions",
     "VillagerProfessions",
+    "LoadConditions",
     "CauldronFluidContents",
     "BlockAndTintGetter",
     "GroundLevel",
@@ -121,6 +122,7 @@ pub(super) const REACHED: &[(&str, &str, &str)] = &[
 const EXPORTS: &[&str] = &[
     "Hooks",
     "ReloadApply",
+    "BlockEntityTransform",
     "StructureType",
     "StructurePiece",
     "BlockPart",
@@ -129,6 +131,7 @@ const EXPORTS: &[&str] = &[
     "MenuPart",
     "FluidPart",
     "ServerReloadListener",
+    "LoadCondition",
     "GameTestFunction",
     "ClientReloadListener",
     "BiomeColorResolver",
@@ -172,6 +175,7 @@ const LOAD_CONTEXTS: &[&str] = &[
 /// the worldgen workers, its block tint sources, colour resolvers and section geometry on the
 /// meshing workers. They keep no mutable state and get no `Host`.
 const WORKERS: &[&str] = &[
+    "BlockEntityTransform",
     "StructureType",
     "StructurePiece",
     "BlockTintSource",

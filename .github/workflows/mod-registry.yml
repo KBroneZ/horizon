@@ -1,25 +1,23 @@
 name: mod-registry
 # The submission service is its own workspace (crates/horizon-mod-registry), so the checks job doesn't build
-# it: this one does, when it or horizon-mods (the checks it shares with the launcher and the game) changes,
-# and builds its image (horizon-mod-vocab's build script reads the game's hook sources, so the image copies them).
+# it: this one does, and builds its image, whenever anything the image copies changes (horizon-mod-vocab's build
+# script reads the game's hook sources, so the image copies every crate).
 on:
   push:
     branches: [main]
     paths:
-      - 'crates/horizon-mod-package/**'
-      - 'crates/horizon-mod-registry/**'
-      # Its image's build reads these too (crates/horizon-mod-registry/Dockerfile).
-      - 'crates/horizon-mod-vocab/**'
-      - 'crates/horizon-mod-api-gen/**'
+      # Everything its image copies (crates/horizon-mod-registry/Dockerfile): every crate's sources, which
+      # horizon-mod-vocab's build script reads, the root manifest and the build context's ignore list.
+      - 'crates/**'
+      - 'Cargo.toml'
       - '.dockerignore'
       - '.github/workflows/mod-registry.yml'
   pull_request:
     paths:
-      - 'crates/horizon-mod-package/**'
-      - 'crates/horizon-mod-registry/**'
-      # Its image's build reads these too (crates/horizon-mod-registry/Dockerfile).
-      - 'crates/horizon-mod-vocab/**'
-      - 'crates/horizon-mod-api-gen/**'
+      # Everything its image copies (crates/horizon-mod-registry/Dockerfile): every crate's sources, which
+      # horizon-mod-vocab's build script reads, the root manifest and the build context's ignore list.
+      - 'crates/**'
+      - 'Cargo.toml'
       - '.dockerignore'
       - '.github/workflows/mod-registry.yml'
 permissions:

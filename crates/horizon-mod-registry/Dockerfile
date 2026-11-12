@@ -3,9 +3,10 @@ FROM rust:1-slim AS build
 WORKDIR /src
 # The root manifest only for the shared crates' workspace settings (edition, lints).
 COPY Cargo.toml Cargo.toml
-# Every crate's sources, though only the registry's own workspace compiles: horizon-mod-package depends on
-# horizon-mod-vocab, whose build script generates the mod API from the game's hook sources
-# (crates/horizon-client/src/game and the crates its hooks name). .dockerignore leaves out build folders.
+# Every crate's sources, though only the registry's own workspace compiles: the crates its Cargo.lock builds from a
+# path, and what horizon-mod-vocab's build script reads to generate the mod API (the game's hook sources under
+# crates/horizon-client/src/game and the crate each hook target names). tests/test_service_images.py checks this.
+# .dockerignore leaves out build folders.
 COPY crates crates
 RUN cargo build --release --locked --manifest-path crates/horizon-mod-registry/Cargo.toml
 
