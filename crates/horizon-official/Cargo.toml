@@ -17,9 +17,9 @@ horizon-heartbeat = { path = "../horizon-heartbeat" }
 horizon-friends = { path = "../horizon-friends", features = ["game"] }
 horizon-official-servers = { path = "../horizon-official-servers" }
 horizon-discord = { path = "../horizon-discord" }
-horizon-perf-share = { path = "../horizon-perf-share" }
 horizon-name-tag = { path = "../horizon-name-tag" }
 horizon-pregen = { path = "../horizon-pregen" }
+horizon-perf-share = { path = "../horizon-perf-share" }
 log = "0.4"
 
 [build-dependencies]
