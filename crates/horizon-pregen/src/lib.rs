@@ -63,6 +63,9 @@ impl Store for Setting {
     fn owns(&self, key: &str) -> bool {
         key == KEY
     }
+    fn defaults(&self) {
+        HOOKS.set_enabled(false);
+    }
     fn load(&self, _key: &str, value: &str) {
         if let Ok(on) = value.parse() {
             HOOKS.set_enabled(on);
@@ -141,6 +144,15 @@ mod tests {
         // A value that isn't a switch changes nothing.
         SETTING.load("pregen", "yes");
         assert!(HOOKS.enabled());
+        // Seat 1 switches to a profile whose file has no `pregen`: the load starts from the
+        // default, and seat 0 keeps its own.
         set_seat(0);
+        SETTING.load("pregen", "true");
+        set_seat(1);
+        SETTING.defaults();
+        assert!(!HOOKS.pregen_command() && SETTING.is_default());
+        set_seat(0);
+        assert!(HOOKS.enabled(), "P1's stays");
+        SETTING.defaults();
     }
 }
