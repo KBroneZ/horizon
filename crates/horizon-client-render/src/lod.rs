@@ -94,7 +94,8 @@ const MAX_ZOOM_BOOST: i32 = 3;
 /// as much, so rounding never swings it off a tile being looked at.
 const ZOOM_YAW_STEP: f32 = 5.0;
 
-/// Where a zoomed view asks for finer far tiles (the `lodZoomDetail` extra).
+/// Where a zoomed view asks for finer far tiles (the `lodZoomDetail` extra, crate
+/// `horizon-zoom-detail`, through `horizon_hooks::Hooks::far_terrain_zoom_detail`).
 ///
 /// `Plan::visit`'s falloff keeps a tile's cells roughly the same size on
 /// screen, which silently assumes the field of view never changes. A spyglass

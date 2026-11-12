@@ -12,7 +12,7 @@ use horizon_platform::hooks::{self, Hooks};
 use horizon_platform::{pages, settings};
 
 /// Every Horizon part in the game, in the order its hooks run.
-const PARTS: [&dyn Hooks; 6] = [
+const PARTS: [&dyn Hooks; 7] = [
     // The anonymous "I'm playing" ping.
     &horizon_heartbeat::HOOKS,
     // Play with Friends: `friend:` addresses join through its tunnel.
@@ -25,12 +25,15 @@ const PARTS: [&dyn Hooks; 6] = [
     &horizon_name_tag::HOOKS,
     // /pregen in the player's own worlds (docs/extras.md).
     &horizon_pregen::HOOKS,
+    // Far terrain planned finer where a zoom looks (`lodZoomDetail`).
+    &horizon_zoom_detail::HOOKS,
 ];
 /// Their settings, in the player's settings files.
-const STORES: [&dyn settings::Store; 3] = [
+const STORES: [&dyn settings::Store; 4] = [
     &horizon_discord::SETTING,
     &horizon_name_tag::SETTING,
     &horizon_pregen::SETTING,
+    &horizon_zoom_detail::SETTING,
 ];
 /// Their rows and pages in the options screens.
 const PAGES: [&dyn pages::Page; 3] = [

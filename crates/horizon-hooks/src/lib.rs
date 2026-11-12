@@ -119,6 +119,14 @@ pub trait Hooks: Sync {
     fn pregen_command(&self) -> bool {
         false
     }
+
+    /// Whether far terrain a zoom magnifies (a spyglass, the zoom key) is planned finer for the
+    /// player whose turn it is, so it doesn't show the coarse cells of an unzoomed screen. Asked
+    /// each frame far terrain is planned; does nothing unless far terrain is on and the view is
+    /// zoomed. Costs far tiles while the zoom is held and gives them back after.
+    fn far_terrain_zoom_detail(&self) -> bool {
+        false
+    }
 }
 
 /// What [`Hooks::get_the_game`] answers. The texts are translation keys of the game's own strings
@@ -385,6 +393,11 @@ pub mod engine {
     /// [`Hooks::pregen_command`]: whether any hook says so.
     pub fn pregen_command() -> bool {
         all().iter().any(|hooks| hooks.pregen_command())
+    }
+
+    /// [`Hooks::far_terrain_zoom_detail`]: whether any hook says so.
+    pub fn far_terrain_zoom_detail() -> bool {
+        all().iter().any(|hooks| hooks.far_terrain_zoom_detail())
     }
 }
 

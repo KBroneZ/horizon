@@ -1842,6 +1842,7 @@ dependencies = [
  "horizon-official-servers",
  "horizon-platform",
  "horizon-pregen",
+ "horizon-zoom-detail",
  "log",
  "winresource",
 ]
@@ -2067,6 +2068,14 @@ dependencies = [
  "serde_json",
  "sha2",
  "xxhash-rust",
+]
+
+[[package]]
+name = "horizon-zoom-detail"
+version = "0.1.0"
+dependencies = [
+ "horizon-hooks",
+ "horizon-platform",
 ]
 
 [[package]]

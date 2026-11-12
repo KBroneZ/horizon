@@ -37,6 +37,7 @@ members = [
     "crates/horizon-discord",
     "crates/horizon-name-tag",
     "crates/horizon-pregen",
+    "crates/horizon-zoom-detail",
     "crates/horizon-official-servers",
     "crates/horizon-bench",
     "crates/horizon-friends",
