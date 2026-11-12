@@ -155,7 +155,7 @@ Horizon's own extras and its product, and every built-in address of an outside s
   and partner servers in the list, Play with Friends and its relay, Discord, the "I'm playing" ping, telemetry and
   benchmark uploads, releases and updates, the hosting supervisor, the launcher.
 - **Examples:** `horizon-addresses`, `horizon-cosmetics`, `horizon-friends`, `horizon-relay`, `horizon-telemetry`,
-  `horizon-bench`, `horizon-release-sign`, `horizon-server`, `horizon-mod-registry`, `horizon-heartbeat`,
+  `horizon-perf-share`, `horizon-release-sign`, `horizon-server`, `horizon-mod-registry`, `horizon-heartbeat`,
   `horizon-official`, `horizon-official-servers`, `horizon-discord`, `launcher/`. Still in engine crates today:
   `game/cosmetics.rs`, `game/emotes.rs`, `game/extras.rs`, `game/tweaks.rs`, `extras_ui.rs`, `pvp.rs`.
 - **Rules:**
@@ -287,7 +287,7 @@ build pays nothing.
 
 The hooks today: `started` (once, when someone plays: not a dedicated server, a benchmark or an automated run),
 `published` (the world opened to or closed from LAN or friends, on change), `shutdown` (the window closed, the
-world saved), `tunnel` (the resolver of `friend:` addresses, Play with Friends') and a multiplayer connection's
+world saved), `tunnel` (the resolver of `friend:` addresses, Play with Friends'), `captures` (Open and Share for saved performance captures, `horizon-perf-share`: with none registered the game offers neither) and a multiplayer connection's
 lifecycle: `connecting` (address, player name, LAN), `joined`, `left` (on purpose) and `ended` (reason, its
 translation key, whether the server sent it). `ended` may return a `Reconnect` (address, name, LAN, when, attempt of
 attempts): the engine shows its countdown on the Disconnected screen, with Cancel, and connects when it is due; every
@@ -592,9 +592,9 @@ All three run in CI's verify job and in `tools/pr_ready.py`.
 
 | Crate | Uses, against the rule |
 |---|---|
-| `horizon-client` | platform: `horizon-anticheat`, `-chat-filter`, `-dualsense`, `-hdr`, `-mod-api-gen`, `-mods`, `-optifine`, `-shader-api`, `-shaders`, `-theme`; Horizon: `horizon-bench`, `-cosmetics`, `-friends`, `-telemetry` |
-| `horizon-client-lib` | platform: `horizon-anticheat`, `-chat-filter`, `-hdr`, `-mcp`, `-mods`, `-optifine`, `-shader-api`, `-shaders`; Horizon: `horizon-bench`, `-telemetry` |
-| `horizon-client-render` | platform: `horizon-hdr`, `-optifine`, `-polytone`, `-shader-api`, `-shaders`; Horizon: `horizon-cosmetics` |
+| `horizon-client` | platform: `horizon-anticheat`, `-chat-filter`, `-dualsense`, `-hdr`, `-mod-api-gen`, `-mods`, `-optifine`, `-shader-api`, `-shaders`, `-theme`; Horizon: `horizon-cosmetics`, `-friends`, `-telemetry` |
+| `horizon-client-lib` | platform: `horizon-anticheat`, `-hdr`, `-mcp`, `-mods`, `-optifine`, `-shader-api`, `-shaders`; Horizon: `horizon-telemetry` |
+| `horizon-client-render` | platform: `horizon-hdr`, `-optifine`, `-polytone`, `-shader-api`, `-shaders` |
 
 No platform crate depends on Horizon.
 
@@ -631,6 +631,7 @@ Horizon's own and third-party addresses (Horizon layer):
 |---|---|---|
 | `play.playhorizon.dev` (status `:24454`), previously `horizon.bunchy7s.dev` | the official server in the list, its status | `horizon-addresses` (#12993), `launcher/links.json` |
 | `cosmetics.playhorizon.dev` | cosmetics, emotes, presence | `horizon-addresses` (#12993) |
+| `playhorizon.dev/perf`, `playhorizon.dev/api/perf/captures` | the performance viewer Open shows a saved capture in, and the upload behind Share (`HORIZON_PERF_VIEWER`, `HORIZON_PERF_CAPTURES` override them) | `horizon-addresses`, used by `horizon-perf-share` |
 | `telemetry.playhorizon.dev` | opt-in telemetry, the "I'm playing" ping, benchmark uploads | `horizon-addresses` (#12993) |
 | `stun.cloudflare.com`, `stun.l.google.com` | Play with Friends NAT discovery | `horizon-addresses` (#12993) |
 | `afri-network.co.za` | the withdrawn partner server, so the game can remove the entry it added | `horizon-addresses` |
