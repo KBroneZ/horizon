@@ -21,10 +21,10 @@ const PARTS: [&dyn Hooks; 6] = [
     &horizon_official_servers::HOOKS,
     // "Playing Horizon" on the player's Discord profile.
     &horizon_discord::HOOKS,
-    // Open and Share for saved performance captures.
-    &horizon_perf_share::HOOKS,
     // The player's own name over their head in third person (docs/extras.md).
     &horizon_name_tag::HOOKS,
+    // Open and Share for saved performance captures.
+    &horizon_perf_share::HOOKS,
 ];
 /// Their settings, in the player's settings files.
 const STORES: [&dyn settings::Store; 2] = [&horizon_discord::SETTING, &horizon_name_tag::SETTING];
