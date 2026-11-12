@@ -1811,6 +1811,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "horizon-name-tag"
+version = "0.1.0"
+dependencies = [
+ "horizon-hooks",
+ "horizon-platform",
+]
+
+[[package]]
 name = "horizon-narrator"
 version = "0.1.0"
 dependencies = [
@@ -1830,6 +1838,7 @@ dependencies = [
  "horizon-friends",
  "horizon-game",
  "horizon-heartbeat",
+ "horizon-name-tag",
  "horizon-official-servers",
  "horizon-platform",
  "log",
