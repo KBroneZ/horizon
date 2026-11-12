@@ -5,7 +5,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
-use horizon_hooks::{Frame, Milestone, WorldLeft, engine};
+use horizon_hooks::{PlayedFrame, Milestone, WorldLeft, engine};
 
 use crate::spans::{self, startup};
 
@@ -49,7 +49,7 @@ impl Session {
             startup::mark("world.first_frame");
             engine::world_shown(opening.elapsed());
         }
-        engine::frame(&Frame::new(ms, &|| spans::culprit(frame_spans)));
+        engine::played_frame(&PlayedFrame::new(ms, &|| spans::culprit(frame_spans)));
     }
 
     /// The player left the world: the session ends.

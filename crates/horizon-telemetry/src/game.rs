@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
-use horizon_platform::hooks::{self, Frame, Hooks, Milestone, WorldLeft};
+use horizon_platform::hooks::{self, PlayedFrame, Hooks, Milestone, WorldLeft};
 
 use crate::payload::{Crash, Display, Perf, Settings, System, Timings};
 use crate::scrub::Scrubber;
@@ -64,7 +64,7 @@ impl Hooks for Telemetry {
         self.session().world_shown(since_opening);
     }
 
-    fn frame(&self, frame: &Frame<'_>) {
+    fn played_frame(&self, frame: &PlayedFrame<'_>) {
         self.session().frame(frame.ms, || frame.slowest_step());
     }
 

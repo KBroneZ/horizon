@@ -46,9 +46,17 @@ pub use horizon_server_files as server_files;
 /// [`hooks::register`] it before the game starts (docs/layers.md, "How a Horizon crate plugs
 /// in"). The engine's dispatch side is not part of the API.
 pub mod hooks {
+    /// The players the game shows (`horizon_hooks::players`): the views [`Hooks::frame`] and
+    /// [`Hooks::tick`] get, the pose a crate lays over a player's body, what goes by their names,
+    /// the crate's sprites, the camera, and what a crate draws on them.
+    pub use horizon_hooks::players::{
+        BODY_PARTS, Badge, BodyPose, Bone, CameraOverride, CameraView, Frame, Gear, Kind, Light,
+        Look, Mark, Mesh, Motion, NameDecoration, PartPoses, Particle, Pass, PlayerDraw,
+        PlayerModel, PlayerModels, Quad, SpriteStore, Sprites, View,
+    };
     pub use horizon_hooks::{
-        Benchmark, Control, Crash, Display, Frame, Gpu, Hooks, Milestone, Started, TooLate,
-        WorldLeft, register, tunnel,
+        Activity, Benchmark, Client, Control, Crash, Dimension, Display, GameMode, GetTheGame, Gpu,
+        Hooks, Milestone, Play, PlayedFrame, Started, TooLate, WorldLeft, register, seat, tunnel,
     };
 }
 
@@ -60,10 +68,25 @@ pub mod settings {
 
 /// Settings pages a crate adds to the options screens (docs/layers.md, "Platform registries").
 pub mod pages {
-    pub use horizon_hooks::pages::{Act, Label, Page, Place, Row, register};
+    pub use horizon_hooks::pages::{Act, Label, Page, Place, Row, connect, register};
+}
+
+/// The lang files with a crate's text, loaded with the game's own (docs/layers.md, "Platform
+/// registries").
+pub mod lang {
+    pub use horizon_hooks::lang::{Files, register};
 }
 
 /// Drawing on the HUD (docs/layers.md, "Platform registries").
 pub mod hud {
     pub use horizon_hooks::hud::{Canvas, Corner, Layer, register};
+}
+
+/// The multiplayer server list as vanilla stores it (`servers.dat`): read, write, add, remove,
+/// and the lock held while it is read and written back.
+#[cfg(feature = "protocol")]
+pub mod servers {
+    pub use horizon_protocol::servers::{
+        ServerEntry, load, lock, parse_address, prepend, remove_where, save,
+    };
 }
