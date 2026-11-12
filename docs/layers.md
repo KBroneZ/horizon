@@ -155,7 +155,7 @@ Horizon's own extras and its product, and every built-in address of an outside s
   and partner servers in the list, Play with Friends and its relay, Discord, the "I'm playing" ping, telemetry and
   benchmark uploads, releases and updates, the hosting supervisor, the launcher.
 - **Examples:** `horizon-addresses`, `horizon-cosmetics`, `horizon-friends`, `horizon-relay`, `horizon-telemetry`,
-  `horizon-bench`, `horizon-release-sign`, `horizon-server`, `horizon-mod-registry`, `horizon-heartbeat`,
+  `horizon-perf-share`, `horizon-release-sign`, `horizon-server`, `horizon-mod-registry`, `horizon-heartbeat`,
   `horizon-official`, `horizon-official-servers`, `horizon-discord`, `launcher/`. Still in engine crates today:
   `game/cosmetics.rs`, `game/emotes.rs`, `game/extras.rs`, `game/tweaks.rs`, `extras_ui.rs`, `pvp.rs`.
 - **Rules:**
@@ -287,7 +287,7 @@ build pays nothing.
 
 The hooks today: `started` (once, when someone plays: not a dedicated server, a benchmark or an automated run),
 `published` (the world opened to or closed from LAN or friends, on change), `shutdown` (the window closed, the
-world saved) and `tunnel` (the resolver of `friend:` addresses, Play with Friends'). **A hook you need and don't find:** add a method with an empty default to `Hooks` and a function in
+world saved) and `tunnel` (the resolver of `friend:` addresses, Play with Friends') and `captures` (Open and Share for saved performance captures, `horizon-perf-share`: with none registered the game offers neither). **A hook you need and don't find:** add a method with an empty default to `Hooks` and a function in
 `horizon_hooks::engine` that the engine calls where vanilla does the matching thing; give it plain data or a type
 the engine owns, never one from above. A hook that needs engine types the platform doesn't expose yet (a draw
 context for HUD and chat overlays, a settings page) comes with that type's platform API (M6). An extension point
@@ -341,6 +341,8 @@ pub trait Store: Sync {
     fn file(&self) -> &'static str;
     /// Whether a `key:value` line of that file is this store's (a fixed list, or a `<name>.` prefix).
     fn owns(&self, key: &str) -> bool;
+    /// Back to the defaults, for the player whose turn it is, before each load. Nothing by default.
+    fn defaults(&self) {}
     /// One of its lines, as the game loads its settings. Unknown values keep the default.
     fn load(&self, key: &str, value: &str);
     /// Its lines, as the game saves its settings.
@@ -352,7 +354,8 @@ pub trait Store: Sync {
 
 - The engine routes lines in `Settings::load` and `Settings::save`: once per load or save, never per frame.
   Each file is read once. A store's lines come after the engine's own in a shared file. A line nobody owns
-  is kept as it was.
+  is kept as it was. Every store's `defaults` runs first, so a key the file lacks (a splitscreen player's
+  other profile, an older file, no file) loads as its default, as the engine's own extras do.
 - A setting that moves out of `extras.rs` keeps its key and file, so players keep their choice. The engine's
   `Extras` stops reading and writing the key in the same PR.
 - A page that changes a store's setting (below) needs nothing else: the options screen saves on close, as
@@ -587,9 +590,9 @@ All three run in CI's verify job and in `tools/pr_ready.py`.
 
 | Crate | Uses, against the rule |
 |---|---|
-| `horizon-client` | platform: `horizon-anticheat`, `-chat-filter`, `-dualsense`, `-hdr`, `-mod-api-gen`, `-mods`, `-optifine`, `-shader-api`, `-shaders`, `-theme`; Horizon: `horizon-bench`, `-cosmetics`, `-friends`, `-telemetry` |
-| `horizon-client-lib` | platform: `horizon-anticheat`, `-chat-filter`, `-hdr`, `-mcp`, `-mods`, `-optifine`, `-shader-api`, `-shaders`; Horizon: `horizon-bench`, `-telemetry` |
-| `horizon-client-render` | platform: `horizon-hdr`, `-optifine`, `-polytone`, `-shader-api`, `-shaders`; Horizon: `horizon-cosmetics` |
+| `horizon-client` | platform: `horizon-anticheat`, `-chat-filter`, `-dualsense`, `-hdr`, `-mod-api-gen`, `-mods`, `-optifine`, `-shader-api`, `-shaders`, `-theme`; Horizon: `horizon-cosmetics`, `-friends`, `-telemetry` |
+| `horizon-client-lib` | platform: `horizon-anticheat`, `-hdr`, `-mcp`, `-mods`, `-optifine`, `-shader-api`, `-shaders`; Horizon: `horizon-telemetry` |
+| `horizon-client-render` | platform: `horizon-hdr`, `-optifine`, `-polytone`, `-shader-api`, `-shaders` |
 
 No platform crate depends on Horizon.
 
@@ -626,6 +629,7 @@ Horizon's own and third-party addresses (Horizon layer):
 |---|---|---|
 | `play.playhorizon.dev` (status `:24454`), previously `horizon.bunchy7s.dev` | the official server in the list, its status | `horizon-addresses` (#12993), `launcher/links.json` |
 | `cosmetics.playhorizon.dev` | cosmetics, emotes, presence | `horizon-addresses` (#12993) |
+| `playhorizon.dev/perf`, `playhorizon.dev/api/perf/captures` | the performance viewer Open shows a saved capture in, and the upload behind Share (`HORIZON_PERF_VIEWER`, `HORIZON_PERF_CAPTURES` override them) | `horizon-addresses`, used by `horizon-perf-share` |
 | `telemetry.playhorizon.dev` | opt-in telemetry, the "I'm playing" ping, benchmark uploads | `horizon-addresses` (#12993) |
 | `stun.cloudflare.com`, `stun.l.google.com` | Play with Friends NAT discovery | `horizon-addresses` (#12993) |
 | `afri-network.co.za` | the withdrawn partner server, so the game can remove the entry it added | `horizon-addresses` |
