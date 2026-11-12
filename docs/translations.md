@@ -56,9 +56,12 @@ or checked, and say in the pull request which language you speak.
 - **Only a person who speaks the language clears a mark.** Never run `--mark-reviewed` on machine-written text, and
   never on text an AI tool rewrote, even when it reads well. An agent marks only entries whose wording came from a
   person, such as a #translations report it turns into a pull request (quote the report in the pull request).
-- A new launcher string still needs an entry in every launcher lang file (`launcher/src/i18n/tests.rs` checks it),
-  and a new game string falls back to English where a language lacks it. A machine translation is fine for both: it
-  starts unreviewed by itself.
+- A new launcher or game string falls back to English where a language lacks an entry: the launcher's lang files are
+  sparse on purpose, so a new label does not have to touch every language. `launcher/src/i18n/tests.rs` enforces only
+  that each file is valid JSON, that an entry keeps the same `{name}` placeholders as its English text and that no
+  translation is empty. Missing and stale entries are reported as coverage, not failures
+  (`HORIZON_LAUNCHER_I18N_DETAILS=1` lists them). Never add a dummy English entry to a lang file. A machine
+  translation is fine for both: it starts unreviewed by itself.
 - Keep placeholders as they are (`%s`, `%1$s` in the game, `{name}` in the launcher): `lang_coverage.py` reports a
   changed one.
 
