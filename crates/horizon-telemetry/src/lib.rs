@@ -20,7 +20,6 @@ pub mod game;
 pub mod live;
 pub mod outbox;
 pub mod payload;
-pub mod scrub;
 pub mod server_status;
 /// The machine's probes, from the platform (`horizon-system`). Kept at this path for the
 /// launcher and the benchmark.
