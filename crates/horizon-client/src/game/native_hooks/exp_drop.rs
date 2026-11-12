@@ -141,3 +141,48 @@ impl Game<'_> {
         })
     }
 }
+
+impl Game<'_> {
+    /// The block entity at `key` with its identity, as a player's break finds it before the
+    /// removal takes it out of the world.
+    pub(in crate::game) fn live_block_entity(
+        &self,
+        key: (i32, i32, i32),
+    ) -> Option<(horizon_client::containers::BlockEntity, u64)> {
+        let entity = self.world.block_entities.get(&key)?.clone();
+        Some((entity, self.world.block_entities.generation(&key)?))
+    }
+    /// `Block.dropResources` for a player's break (`block_dropped`), with the block entity the
+    /// removal took (`live`, from [`Self::live_block_entity`]) held readable for the
+    /// `block_drops` event (`BlockDropsEvent.getBlockEntity`) and released after it: handles to
+    /// it are stale from then on. `at` is the position, the state after the removal and the
+    /// state the block had; `who` the breaker's UUID, their tool and the held block entity;
+    /// `loot` the stacks and an experience override.
+    pub(in crate::game) fn player_block_dropped(
+        &mut self,
+        at: ([i32; 3], BlockStateId, BlockStateId),
+        who: (
+            Option<u128>,
+            Option<&ItemStack>,
+            Option<(horizon_client::containers::BlockEntity, u64)>,
+        ),
+        loot: (Vec<ItemStack>, Option<u32>),
+    ) -> crate::game::spill::BlockDrops {
+        let ([x, y, z], state, was) = at;
+        let (breaker, tool, live) = who;
+        let held = (self.native_authoritative()
+            && mod_api::__private::listened(mod_api::HookId::BlockDrops))
+        .then_some(live)
+        .flatten();
+        if let Some((entity, generation)) = held {
+            self.world
+                .block_entities
+                .hold_broken((x, y, z), generation, was.0, entity);
+        }
+        let dropped = self.with_level(|_, level, _| {
+            level.block_dropped(BlockPos::new(x, y, z), state, breaker, tool, loot.0, loot.1)
+        });
+        self.world.block_entities.release_broken();
+        dropped
+    }
+}

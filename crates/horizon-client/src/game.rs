@@ -5862,9 +5862,8 @@ impl Game<'_> {
         } else {
             self.loot_block_entity(pos, &facts.name)
         };
-        let live_entity = self.world.block_entities.get(&key).cloned();
-        let live_generation = self.world.block_entities.generation(&key);
-        if let Some(entity) = &live_entity {
+        let live = self.live_block_entity(key);
+        if let Some((entity, _)) = &live {
             self.pending
                 .record_from(&self.world, pos, entity, &facts.name);
         } else if let Some(tag) = spill::saved_entity(&self.world, pos) {
@@ -5900,28 +5899,11 @@ impl Game<'_> {
                 // Block.dropResources: the item entities, then spawnAfterBreak's
                 // experience, with the mods' say between the two.
                 let breaker = Some(self.native_acting_id());
-                // `BlockDropsEvent.getBlockEntity`: the removal took the block entity out of the
-                // world, so a read-only view of it stays held through the event.
-                let hold = (self.native_authoritative()
-                    && mod_api::__private::listened(mod_api::HookId::BlockDrops))
-                .then(|| live_entity.zip(live_generation))
-                .flatten();
-                if let Some((entity, generation)) = hold {
-                    self.world
-                        .block_entities
-                        .hold_broken(key, generation, broken.0, entity);
-                }
-                let dropped = self.with_level(|_, level, _| {
-                    level.block_dropped(
-                        BlockPos::new(pos[0], pos[1], pos[2]),
-                        state,
-                        breaker,
-                        held.as_ref(),
-                        stacks,
-                        exp_to_drop,
-                    )
-                });
-                self.world.block_entities.release_broken();
+                let dropped = self.player_block_dropped(
+                    (pos, state, broken),
+                    (breaker, held.as_ref(), live),
+                    (stacks, exp_to_drop),
+                );
                 let canceled = dropped.canceled;
                 if let Some(kept) = self.break_collect.as_mut() {
                     kept.extend(dropped.items.into_iter().map(|item| item.stack));
