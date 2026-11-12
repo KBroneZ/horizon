@@ -53,7 +53,8 @@ router that opened the port, or with a forwarded port, that's it: no server took
 (`horizon_hooks::tunnel`, `horizon_platform::hooks::tunnel` for the Horizon layer): the resolver a hook offers
 reads codes and opens the tunnel, which the join (`net.rs`) then reaches on a loopback port like any server.
 horizon-friends' `game` side offers it, and the official executable (`horizon-official`) registers it;
-horizon-client's own executable has none, so there a `friend:` address is refused. Hosting needs no hook: the
+horizon-client's own executable has none, so there a `friend:` address is refused and the title screen's
+Friends icon, which opens Join a Friend, is inactive (`net::joins_friends`). Hosting needs no hook: the
 host end connects to the world's LAN port over loopback, so tunnelled guests are LAN guests. Hosting sees the
 game only through `horizon_hooks`: `Hooks::share` each client tick with a `share::ShareView` (open the world to
 LAN, its players, chat, the clipboard, a link), `Hooks::lan_closed`, its page (`pages::Place::PauseFriends`, what
