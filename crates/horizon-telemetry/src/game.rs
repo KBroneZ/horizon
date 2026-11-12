@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
-use horizon_platform::hooks::{self, PlayedFrame, Hooks, Milestone, WorldLeft};
+use horizon_platform::hooks::{self, Hooks, Milestone, PlayedFrame, WorldLeft};
 
 use crate::payload::{Crash, Display, Perf, Settings, System, Timings};
 use crate::scrub::Scrubber;

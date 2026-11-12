@@ -5,7 +5,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
-use horizon_hooks::{PlayedFrame, Milestone, WorldLeft, engine};
+use horizon_hooks::{Milestone, PlayedFrame, WorldLeft, engine};
 
 use crate::spans::{self, startup};
 

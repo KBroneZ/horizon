@@ -838,7 +838,9 @@ mod tests {
         engine::startup(Milestone::CoreReady, Duration::from_millis(4000));
         // Any hook that wants the steps timed has them.
         assert!(engine::wants_frame_steps(Path::new("home")));
-        engine::played_frame(&PlayedFrame::new(70.0, &|| Some(("render/terrain".into(), 50.0))));
+        engine::played_frame(&PlayedFrame::new(70.0, &|| {
+            Some(("render/terrain".into(), 50.0))
+        }));
         // A benchmark runs on the hook that knows it, and on none when nobody does.
         let run = |scenario| Benchmark {
             scenario,
