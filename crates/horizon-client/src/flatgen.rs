@@ -494,7 +494,9 @@ mod tests {
         )
         .unwrap();
         let proto = terrain.proto(&mut (), 3, -2);
-        let view = terrain.light_view(&proto).expect("a flat proto has a light view");
+        let view = terrain
+            .light_view(&proto)
+            .expect("a flat proto has a light view");
         let column = terrain.finish(proto);
         assert_eq!((view.x, view.z), (3, -2));
         for y in [-64, -63, -62, -61] {
