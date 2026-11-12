@@ -2935,7 +2935,7 @@ impl Game<'_> {
     /// move to the morning (NeoForge's `SleepFinishedTimeEvent`). `adjustment` comes in as
     /// `Marker(minecraft:wake_up_from_sleep)` and a mod may set `Absolute`, `Relative` (from
     /// `current`) or another marker; `new_time` is the vanilla morning, read only (contract 2: in
-    /// version 1 a mod wrote it). Resolved once after every mod (`game/wake_time.rs`): a time
+    /// version 1 a mod wrote it). Resolved once after every mod (`game/world/wake_time.rs`): a time
     /// before `current`, or a marker the clock lacks, keeps the morning. Only with `advance_time`
     /// on; `native_time_skip` then hears the jump and may still cancel it. Set `canceled` and
     /// the clock stays, and `native_time_skip` is not asked.

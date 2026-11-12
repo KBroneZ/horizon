@@ -111,7 +111,6 @@ pub mod points {
 }
 mod host;
 mod native_hooks;
-mod wake_time;
 use event_loop::EventLoopCtl;
 use hand::interact_location;
 use horizon_client::random_source;
@@ -13017,7 +13016,7 @@ impl Game<'_> {
                 .bool_at(horizon_client::gamerules::vanilla::ADVANCE_TIME)
             {
                 let t = self.world.day_time;
-                // SleepFinishedTimeEvent: the mods' ClockAdjustment (game/wake_time.rs).
+                // SleepFinishedTimeEvent: the mods' ClockAdjustment (game/world/wake_time.rs).
                 let (target, mut cancel) = self.sleep_finished_target(t);
                 // A canceled event leaves the clock alone, so `native_time_skip` is not asked.
                 if !cancel {
