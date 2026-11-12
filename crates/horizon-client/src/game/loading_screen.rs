@@ -1,8 +1,9 @@
 //! The loading screen while the resources load (`Loading`), the window's app before the game
 //! takes over (`App`), and the checks a start makes first: missing or damaged prepared files,
 //! an unclean last exit, a fullscreen the window system could not show.
-use super::app_hook::GameApp;
 use super::*;
+pub(in crate::game) mod app_hook;
+use app_hook::GameApp;
 
 /// The window system ended the event loop with a failure (on Linux, a compositor dropping the
 /// connection after a protocol error) while fullscreen was on: the next start opens windowed, so a
@@ -29,7 +30,7 @@ pub(super) fn run_event_loop(mut game: Game<'_>) -> Result<()> {
         write_report(&game)?;
         return game.error.take().map_or(Ok(()), Err);
     }
-    let mut app = super::app_hook::app_for(game);
+    let mut app = app_hook::app_for(game);
     let result = EventLoop::new()?.run_app(&mut app);
     game = app.into_game();
     narrator::stop();
@@ -390,7 +391,7 @@ impl Loading {
             renderer_ms,
             game_ms
         );
-        Ok(Some(super::app_hook::app_for(game)))
+        Ok(Some(app_hook::app_for(game)))
     }
 }
 
