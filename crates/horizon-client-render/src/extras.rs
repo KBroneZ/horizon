@@ -689,8 +689,8 @@ impl Item {
             ChatIndicator => ChatAnimation,
             Pvp(o) => return o.parent().map(Pvp),
             Fullbright | DynamicLights | OwnNameTag | HideBlockParticles | MouseTweaks | Sort
-            | NoAi | AgentControl | ReproKeys | Splitscreen | ChatAnimation | WheelCyclesSettings
-            | MusicPage | PackBrowser | Pregen => {
+            | NoAi | AgentControl | ReproKeys | Splitscreen | ChatAnimation
+            | WheelCyclesSettings | MusicPage | PackBrowser | Pregen => {
                 return None;
             }
         })
