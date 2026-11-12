@@ -7,6 +7,7 @@
 //! client predicts its own movement; the server stays authoritative for
 //! everything else.
 mod attack_target;
+mod fall_sound;
 mod interaction_actions;
 mod raw_ingress;
 mod recipe_properties;
@@ -596,7 +597,7 @@ pub(super) struct Remote {
     loaded_sent: bool,
     /// The dimension of the client level the mods heard made
     /// (`native_client_level_load`), to be told dropped once.
-    heard_level: Option<String>,
+    pub(super) heard_level: Option<String>,
     /// `ClientPacketListener.levelLoadTracker`: the loading screen after a login
     /// or respawn, until the player's section is shown.
     pub(super) level_load: horizon_client::level_loading::LevelLoadTracker,
@@ -955,11 +956,9 @@ impl Game<'_> {
                     title.failed(error);
                 }
                 None => {
-                    let mut title = horizon_client::title::Title::new(
-                        std::env::current_dir()?.join("saves"),
-                        &self.options.resources,
-                    )
-                    .with_user(|| self.options.player_name());
+                    let mut title = self
+                        .new_title(std::env::current_dir()?.join("saves"))
+                        .with_user(|| self.options.player_name());
                     title.skip_multiplayer_warning = skip;
                     title.failed(error);
                     self.show_title(title);
@@ -1627,7 +1626,8 @@ impl Game<'_> {
             r.clear_sections(self.world.layout());
         }
         let saves = std::env::current_dir()?.join("saves");
-        let mut title = horizon_client::title::Title::new(saves.clone(), &self.options.resources)
+        let mut title = self
+            .new_title(saves.clone())
             .with_user(|| self.options.player_name());
         title.last_server = self.settings.file.string("lastServer");
         title.skip_multiplayer_warning = self.settings.file.bool("skipMultiplayerWarning");
@@ -2284,7 +2284,9 @@ impl Game<'_> {
                 forgotten_credits.push(item.into_event_credit());
                 continue;
             }
-            self.forget_remote_columns(&mut forgotten, true);
+            horizon_client::spans::time("pr_forget", || {
+                self.forget_remote_columns(&mut forgotten, true)
+            });
             forgotten_credits.clear();
             let chunk = matches!(item, Received::Chunk(_, _));
             if chunk && !overdue && chunks >= CHUNK_PACKETS_PER_FRAME {
@@ -2313,7 +2315,9 @@ impl Game<'_> {
                     };
                     self.observe_client_packet(&packet);
                     if let C::LevelChunkWithLight(p) = *packet {
-                        self.remote_chunk(&p, Some((&format, column)));
+                        horizon_client::spans::time("pr_chunk", || {
+                            self.remote_chunk(&p, Some((&format, column)))
+                        });
                     }
                     chunks += started.map_or(Duration::ZERO, |t| t.elapsed());
                     continue;
@@ -2482,7 +2486,12 @@ impl Game<'_> {
                     return Ok(());
                 }
                 Event::RawPayload(incoming) => self.receive_client_payload(*incoming)?,
-                Event::Packet(packet) => self.handle_packet(*packet)?,
+                Event::Packet(packet) => match *packet {
+                    C::CustomPayload(p) if p.channel == horizon_client::perf_net::CHANNEL => {
+                        self.remote_perf_reply(&p.data)
+                    }
+                    packet => self.handle_packet(packet)?,
+                },
             }
             chunks += started.map_or(Duration::ZERO, |t| t.elapsed());
             if self.remote.is_none() {
@@ -2490,7 +2499,9 @@ impl Game<'_> {
             }
         }
         if self.remote.is_some() {
-            self.forget_remote_columns(&mut forgotten, true);
+            horizon_client::spans::time("pr_forget", || {
+                self.forget_remote_columns(&mut forgotten, true)
+            });
         }
         if let Some(r) = self.remote.as_mut() {
             r.backlog_since = if events.is_empty() {
@@ -2864,7 +2875,7 @@ impl Game<'_> {
     }
     /// The columns a moved or resized storage no longer holds. Returns the
     /// positions it freed (`forget_remote_columns`).
-    fn drop_remote_chunks_out_of_range(
+    pub(in crate::game) fn drop_remote_chunks_out_of_range(
         &mut self,
         center: (i32, i32),
         distance: i32,
@@ -3655,7 +3666,7 @@ impl Game<'_> {
         }
     }
 
-    pub(in crate::game) fn handle_packet(&mut self, packet: C) -> Result<()> {
+    pub(in crate::game) fn apply_packet(&mut self, packet: C) -> Result<()> {
         self.observe_client_packet(&packet);
         match packet {
             // ClientCommonPacketListenerImpl.handlePing runs on the game
@@ -6780,6 +6791,7 @@ impl Game<'_> {
             jump: held(Action::Jump),
             shift: held(Action::Sneak),
             sprint: held(Action::Sprint),
+            sprint_suppressed: false,
             analog: None,
         }
         .with_stick(stick.filter(|_| playing));
@@ -6790,20 +6802,7 @@ impl Game<'_> {
         if self.integrated.is_none() && self.server_address().is_some() {
             keys.analog = None;
         }
-        let [mut strafe, mut forward] = keys.direction();
-        let original = [strafe, forward];
-        self.native_movement_input(&mut forward, &mut strafe, &mut keys.jump, &mut keys.shift);
-        if [strafe, forward] != original {
-            if forward != original[1] {
-                keys.forward = forward > 0.0;
-                keys.backward = forward < 0.0;
-            }
-            if strafe != original[0] {
-                keys.left = strafe > 0.0;
-                keys.right = strafe < 0.0;
-            }
-            keys.analog = Some([strafe, forward]);
-        }
+        let keys = self.mod_movement_keys(keys);
         let input = u8::from(keys.forward)
             | u8::from(keys.backward) << 1
             | u8::from(keys.left) << 2
@@ -7019,21 +7018,7 @@ impl Game<'_> {
                 // client's own level: the fall and honey sounds are heard here
                 // (LocalPlayer.playSound); the server's copy skips this player
                 // (Player.playSound).
-                horizon_client::motion::MotionEvent::Fall(
-                    horizon_client::landing::FallEvent::Sound {
-                        sound,
-                        volume,
-                        pitch,
-                        ..
-                    },
-                ) => {
-                    if let Some(name) = sound
-                        .player_fall_sound()
-                        .or_else(|| sound.honey_landing_sound())
-                    {
-                        self.play_client_player_sound(name, volume, pitch);
-                    }
-                }
+                horizon_client::motion::MotionEvent::Fall(event) => self.block_fall(event),
                 _ => {}
             }
         }
@@ -14036,7 +14021,7 @@ mod tests {
         use super::super::{
             Game, native_entity_refs::tests::with_client_game, native_lifecycle::NativeLifecycle,
         };
-        use horizon_client::{level_loading::Reason, motion::PlayerMotion, title::Title};
+        use horizon_client::{level_loading::Reason, motion::PlayerMotion};
         use horizon_core::geometry::Vec3;
         use horizon_protocol::{
             connection::Pipe,
@@ -14127,7 +14112,7 @@ mod tests {
                 .unwrap();
             assert_eq!(camera(game), Some(local));
 
-            game.title = Some(Title::new(game.save.root.clone(), &game.options.resources));
+            game.title = Some(game.new_title(game.save.root.clone()));
             assert!(
                 camera(game).is_none(),
                 "the title screen has no camera entity"
@@ -16083,6 +16068,7 @@ mod tests {
             trade: None,
             maps: None,
             limited_crafting: false,
+            can_equip: None,
             known_recipes: None,
         };
         let mut menu = Menu::new(Kind::Inventory);
@@ -16494,6 +16480,8 @@ mod tests {
 #[cfg(test)]
 #[path = "player_tick_tests.rs"]
 mod player_tick_tests;
+#[cfg(test)]
+mod movement_input_tests;
 
 /// Whether a synchronized dimension type's values are inside the codec's ranges
 /// (`DimensionType.java`: a coordinate scale of `1.0E-5F` to `3.0E7`, a monster spawn block light

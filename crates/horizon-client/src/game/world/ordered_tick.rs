@@ -34,6 +34,9 @@ pub(super) struct OrderedTicks {
     /// entity lists can change between passes, so this only retains capacity;
     /// entries are rebuilt from the live lists every time.
     pending_buf: Vec<(JoinSeq, Pending)>,
+    /// The falling blocks (id, join) that ended a tick still falling with a part listening to
+    /// `falling_tick`, delivered after the pass.
+    pub(super) falling_ticked: Vec<(u32, JoinSeq)>,
 }
 
 /// The batches of the other kinds, in the order they tick.
@@ -70,6 +73,8 @@ impl Game<'_> {
     pub(super) fn begin_ordered_ticks(&mut self) {
         let _span = horizon_client::spans::guard("ordered_ticks");
         let pending_buf = std::mem::take(&mut self.ordered.pending_buf);
+        let mut falling_ticked = std::mem::take(&mut self.ordered.falling_ticked);
+        falling_ticked.clear();
         let firsts = [
             first_join(&self.armor_stands),
             first_join(&self.boats),
@@ -95,6 +100,7 @@ impl Game<'_> {
             suffix_min,
             lava_random: None,
             pending_buf,
+            falling_ticked,
         };
     }
 
@@ -279,6 +285,9 @@ impl Game<'_> {
                     // orb that is done is removed.
                     let snow = (o.previous, o.position, o.bounds(), o.velocity);
                     self.entity_powder_snow_particles(snow.0, snow.1, snow.2, snow.3, false);
+                    // Its move is filed at once, also for an orb about to go.
+                    let (from, to) = (snow.0, snow.1);
+                    self.entity_section_step(orb_id, [from.x, from.y, from.z], [to.x, to.y, to.z]);
                     self.orb_moved(i, step);
                     if !stays {
                         self.orbs.remove(i);
@@ -287,9 +296,11 @@ impl Game<'_> {
             }
         }
         self.ordered.pending_buf = pending;
+        self.deliver_falling_ticks();
         if events && let Err(e) = self.process_level_events() {
             first_error.get_or_insert(e);
         }
+        self.entity_sections_stepped(super::entity_sections::Family::Ordered);
         first_error.map_or(Ok(()), Err)
     }
 

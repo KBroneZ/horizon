@@ -18,11 +18,9 @@ impl Game<'_> {
         }
         self.perf.world_opening();
         if self.title.is_none() {
-            let title = Title::new(
-                std::env::current_dir()?.join("saves"),
-                &self.options.resources,
-            )
-            .with_user(|| self.options.player_name());
+            let title = self
+                .new_title(std::env::current_dir()?.join("saves"))
+                .with_user(|| self.options.player_name());
             self.show_title(title);
         }
         self.pending_entry = Some(entry);
@@ -691,9 +689,13 @@ impl Game<'_> {
         Ok(())
     }
     /// Ask the parts of each block `isPathfindable` once per state and type: the answer depends
-    /// on nothing else, so path finding and spawning read it with no dispatch.
+    /// on nothing else, so path finding and spawning read it with no dispatch. A server also
+    /// publishes its parts for its world generation.
     pub(super) fn install_parts(&self, prepared: PreparedParts) {
         cauldron_interactions::install(prepared.cauldrons);
+        if self.is_logical_server() {
+            native_worldgen_parts::publish(prepared.parts.as_ref(), &prepared.block_states);
+        }
         api_values::install_block_states(prepared.block_states);
         native_world_read::install_block_tags(prepared.tags);
         mod_api::__private::install_resolved_parts(prepared.parts);
