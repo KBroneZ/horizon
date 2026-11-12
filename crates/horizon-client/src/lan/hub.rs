@@ -1205,11 +1205,11 @@ impl Hub {
     pub fn kick(&mut self, conn: u32, reason: Tag) {
         // The log's "lost connection" line gives the reason, as vanilla's.
         let text = self.english(&reason);
-        if let Some((player, name)) = self.update_guest(conn, |g| {
-            g.left_reason = text.clone();
-            g.sender.disconnect(reason);
-            (g.uuid, g.name.clone())
-        }) {
+        let begun = self.update_guest(conn, |g| {
+            g.begin_kick(text.clone(), reason)
+                .then(|| (g.uuid, g.name.clone()))
+        });
+        if let Some(Some((player, name))) = begun {
             self.pending_kicks.push(HostEvent::Kicked {
                 conn,
                 player,

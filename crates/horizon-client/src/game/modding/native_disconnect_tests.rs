@@ -1,8 +1,12 @@
 //! A mod disconnects a player (server) or leaves the world (client) (#3451).
 use super::native_entity_refs::tests::with_client_game;
 use super::native_guest_turn_tests::with_guests;
+use horizon_client::lan::NetEvent;
 use horizon_client::title::Mode;
-use mod_api::{ClientHost, ServerHost, Text};
+use mod_api::{ClientHost, DisconnectError, Hooks, ModEntry, ServerHost, Text};
+use mod_platform::testing::with_mods;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 fn kicked() -> Text {
     Text::translate("mymod.kicked", vec![])
@@ -59,20 +63,86 @@ fn the_acting_player_can_be_disconnected_and_a_stale_handle_cannot() {
     });
 }
 
+/// Counts the kick and logout notifications; its kick listener disconnects the player again.
+struct Lifecycle {
+    kicked: Arc<AtomicUsize>,
+    logged_out: Arc<AtomicUsize>,
+}
+
+#[mod_api::__subscriptions]
+impl Hooks for Lifecycle {
+    fn player_kicked(&self, host: &mut dyn ServerHost, event: &mut mod_api::PlayerKickedEvent<'_>) {
+        self.kicked.fetch_add(1, Ordering::SeqCst);
+        let player = host
+            .player(event.player)
+            .expect("the kicked guest is still here");
+        assert_eq!(player.disconnect(host, Text::literal("again")), Ok(true));
+    }
+    fn player_logged_out(&self, _: &mut dyn ServerHost, _: &mut mod_api::PlayerLoggedOutEvent<'_>) {
+        self.logged_out.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+/// Repeated disconnects of one guest (twice in one hook, then again from `player_kicked`) make
+/// one kick: the first reason, `player_kicked` once at the hub's next poll, and
+/// `player_logged_out` once when the connection closes. The other guest is untouched.
+#[test]
+#[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+fn repeated_disconnects_kick_once_and_log_out_once() {
+    let kicked_count = Arc::new(AtomicUsize::new(0));
+    let logged_out = Arc::new(AtomicUsize::new(0));
+    let probe = Lifecycle {
+        kicked: kicked_count.clone(),
+        logged_out: logged_out.clone(),
+    };
+    with_mods(vec![ModEntry::new("probe", Box::new(probe))].into(), || {
+        with_guests(|game| {
+            let guest = game.player(12).unwrap();
+            let host: &mut dyn ServerHost = game;
+            assert_eq!(guest.disconnect(host, kicked()), Ok(true));
+            assert_eq!(guest.disconnect(host, Text::literal("")), Ok(true));
+            assert_eq!(left_reason(game, 12), "mymod.kicked");
+            let tick = |game: &mut super::Game<'_>| {
+                game.level_pass.packets_drained = false;
+                game.tick_lan_packets();
+            };
+            tick(game);
+            assert_eq!(kicked_count.load(Ordering::SeqCst), 1);
+            assert_eq!(logged_out.load(Ordering::SeqCst), 0);
+            assert_eq!(left_reason(game, 12), "mymod.kicked");
+            // The client closes its end on the disconnect packet.
+            let events = game.lan.as_ref().unwrap().hub.lan.shared.events.clone();
+            events
+                .send(NetEvent::Left(12, "mymod.kicked".into()))
+                .unwrap();
+            tick(game);
+            tick(game);
+            assert_eq!(kicked_count.load(Ordering::SeqCst), 1);
+            assert_eq!(logged_out.load(Ordering::SeqCst), 1);
+            let hub = &game.lan.as_ref().unwrap().hub;
+            assert!(hub.guest(12).is_none());
+            assert_eq!(hub.guest(13).unwrap().left_reason, "");
+        });
+    });
+}
+
 /// The client leaves at the end of the frame, not inside the call, and the disconnect screen
-/// shows the reason. With no world joined, nothing happens.
+/// shows the reason. With no world joined, the call is refused as unavailable.
 #[test]
 #[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
 fn a_client_mod_leaves_at_the_end_of_the_frame_with_its_reason() {
     with_client_game(|game| {
         game.title = None;
         let host: &mut dyn ClientHost = game;
-        assert_eq!(host.disconnect(Some(kicked())), Ok(false));
+        assert_eq!(
+            host.disconnect(Some(kicked())),
+            Err(DisconnectError::Unavailable)
+        );
         game.native_leave_if_asked().unwrap();
         let (pipe, _server) = horizon_protocol::connection::Pipe::pair();
         game.connect_local(pipe, "Steve").unwrap();
         let host: &mut dyn ClientHost = game;
-        assert_eq!(host.disconnect(Some(kicked())), Ok(true));
+        assert_eq!(host.disconnect(Some(kicked())), Ok(()));
         assert!(
             game.remote.is_some(),
             "still connected until the frame ends"
@@ -88,5 +158,27 @@ fn a_client_mod_leaves_at_the_end_of_the_frame_with_its_reason() {
             ),
             "the disconnect screen with the reason"
         );
+    });
+}
+
+/// A request made in one world never leaves the next: the world switches before the frame
+/// ends, and the client stays in the new one.
+#[test]
+#[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+fn a_leave_request_does_not_follow_a_world_switch() {
+    with_client_game(|game| {
+        game.title = None;
+        let (pipe, _server) = horizon_protocol::connection::Pipe::pair();
+        game.connect_local(pipe, "Steve").unwrap();
+        let host: &mut dyn ClientHost = game;
+        assert_eq!(host.disconnect(Some(kicked())), Ok(()));
+        game.native_lifecycle
+            .begin_open(mod_api::Authority::RemoteClient);
+        game.native_leave_if_asked().unwrap();
+        assert!(game.remote.is_some(), "the new world is not left");
+        assert!(game.title.is_none());
+        // Nothing is left over for a later frame either.
+        game.native_leave_if_asked().unwrap();
+        assert!(game.remote.is_some());
     });
 }

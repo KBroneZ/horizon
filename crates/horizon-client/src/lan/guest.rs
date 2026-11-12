@@ -181,6 +181,8 @@ pub struct Guest {
     pub center_sent: Option<(i32, i32)>,
     /// Why the connection closed (the console's "lost connection").
     pub left_reason: String,
+    /// A kick is under way: its disconnect packet is out and the hub's next poll hears it.
+    pub kicked: bool,
     pub uuid: u128,
     pub name: String,
     /// The profile's properties, for the player list (skins).
@@ -592,6 +594,17 @@ impl Guest {
         guest
     }
 
+    /// The kick's first step, once: the reason recorded and the disconnect packet sent. False
+    /// when a kick is already under way, which then stays as it was.
+    pub fn begin_kick(&mut self, reason_text: String, reason: horizon_core::nbt::Tag) -> bool {
+        if std::mem::replace(&mut self.kicked, true) {
+            return false;
+        }
+        self.left_reason = reason_text;
+        self.sender.disconnect(reason);
+        true
+    }
+
     pub fn participates_online(&self) -> bool {
         self.kind == GuestKind::Network
     }
@@ -644,6 +657,7 @@ impl Guest {
             placed_at: 0,
             center_sent: None,
             left_reason: String::new(),
+            kicked: false,
             uuid: j.uuid,
             name: j.name,
             properties: j.properties,

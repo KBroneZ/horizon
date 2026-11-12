@@ -12,7 +12,7 @@ pub(super) struct NativeNet {
     pub(super) book_ready: bool,
     pub(super) book_retry_at: Option<std::time::Instant>,
     /// A mod's `disconnect` (its reason, if any), carried out at the end of the frame.
-    pub(super) leave: Option<Option<horizon_client::text::Text>>,
+    pub(super) leave: Option<super::native_disconnect::LeaveRequest>,
 }
 
 impl Game<'_> {

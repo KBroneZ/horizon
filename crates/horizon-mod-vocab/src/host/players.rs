@@ -412,13 +412,15 @@ pub trait PlayersBackendMut {
     fn player_action_bar(&mut self, player: PlayerRef, line: Text) -> Result<bool, TextFormError>;
     /// Side: server.
     /// Disconnects the player with `reason` on their disconnect screen
-    /// (NeoForge's `ICommonPacketListener.disconnect(Component)`): vanilla's disconnect packet
-    /// goes out now and the connection closes when the server next handles its players' leaving,
-    /// so the calling hook finishes first. The server log, the `kick` event and
-    /// `player_logged_out` follow as for `/kick`. Unlike `/kick`, it needs no published world.
-    /// Works inside a player's hook for the acting player too. False for a stale handle, a
-    /// fake player, a player who isn't connected and the single-player world's owner (an
-    /// integrated server can't disconnect its own host).
+    /// (NeoForge's `ICommonPacketListener.disconnect(Component)`), through the hub's own kick:
+    /// vanilla's disconnect packet goes out and the kick is recorded now, and the player is
+    /// removed when the hub next polls, not inside the call, so the calling hook finishes first.
+    /// That poll fires `player_kicked`, then the normal leave and `player_logged_out`, as for
+    /// `/kick`. Unlike `/kick`, it needs no published world. Works inside a player's hook for the
+    /// acting player too. Once a kick is under way (from this call, `/kick`, a ban or the
+    /// anticheat) a further call changes nothing and still answers true. False for a stale
+    /// handle, a fake player, a player who isn't connected and the single-player world's owner
+    /// (an integrated server can't disconnect its own host).
     #[access(WorldOnly)]
     /// Refuses text deeper than 512 component nodes before applying any changes.
     fn player_disconnect(&mut self, player: PlayerRef, reason: Text)

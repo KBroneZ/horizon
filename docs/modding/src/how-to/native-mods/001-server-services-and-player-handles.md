@@ -42,7 +42,7 @@ No snapshot of event data is returned by these services.
 Send to one player with `player.tell(host, text)`, `action_bar(host, text)` or
 `tab_list(host, header, footer)`, and disconnect them with a reason on their screen with
 `disconnect(host, reason)` (no published world needed, unlike `/kick`; never the
-single-player world's owner). `set_nickname(host, nickname)`,
+single-player world's owner; removed at the hub's next poll, and only once). `set_nickname(host, nickname)`,
 `set_sleep_ignored(host, ignored)` and `hide(host, permission)` keep their existing
 server behavior. Messaging reaches the acting player and other connected players,
 including displaced online records; it refuses stale or disconnected identities.

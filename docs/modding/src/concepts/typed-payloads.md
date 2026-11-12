@@ -81,9 +81,11 @@ handler has no direct world access: enqueue work to obtain the receiving main-th
 context. Wrong-thread and wrong-side requests return explicit errors.
 
 Outside a payload handler, a server mod disconnects a player with
-`player.disconnect(host, reason)`, and a client mod leaves the server or world with
-`host.disconnect(Some(reason))` (at the end of the frame, the reason on the disconnect
-screen; `None` leaves as the pause menu's Disconnect does).
+`player.disconnect(host, reason)` (the hub's own kick: the player is removed at its next
+poll, after `player_kicked`; a second call while the kick is under way changes nothing),
+and a client mod leaves the server or world with `host.disconnect(Some(reason))` (at the
+end of the frame, the reason on the disconnect screen; `None` leaves as the pause menu's
+Disconnect does; `DisconnectError::Unavailable` with no world joined).
 
 `Queued` means accepted locally, not acknowledged by the peer. Sending reserves
 physical/provider credit before acceptance. Root commit publishes staged sends;
