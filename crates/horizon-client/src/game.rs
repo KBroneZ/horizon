@@ -55,6 +55,7 @@ mod advancements_screen;
 mod agent;
 mod agent_settings;
 mod allays;
+mod app_hook;
 mod armor_stands;
 mod atlas_slots;
 mod attachment_sync;
@@ -12241,6 +12242,11 @@ fn hwnd(window: &Window) -> Option<isize> {
 }
 
 pub use launch_api::{UsageError, exit_code};
+
+/// Registers splitscreen as the app that runs the game (`entry::main_with`).
+pub(crate) fn register_split_app() {
+    split::register();
+}
 
 pub fn run_with() -> Result<()> {
     let Some(mut options) = Options::read()? else {

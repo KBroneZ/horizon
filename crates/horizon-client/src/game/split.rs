@@ -603,6 +603,25 @@ impl<'a> Split<'a> {
     }
 }
 
+/// Splitscreen's `Split` is the app of a game with players: registered with the engine's app
+/// hook (`game::app_hook`) at startup.
+impl<'a> super::app_hook::GameApp<'a> for Split<'a> {
+    fn game(&mut self) -> &mut Game<'a> {
+        &mut self.host
+    }
+    fn into_game(self: Box<Self>) -> Game<'a> {
+        self.host
+    }
+}
+
+fn app<'a>(game: Game<'a>) -> Box<dyn super::app_hook::GameApp<'a> + 'a> {
+    Box::new(Split::new(game))
+}
+
+pub(crate) fn register() {
+    super::app_hook::register(app);
+}
+
 impl ApplicationHandler for Split<'_> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         self.host.resumed(event_loop);
