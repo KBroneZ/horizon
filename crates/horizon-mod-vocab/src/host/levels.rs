@@ -382,8 +382,10 @@ pub trait LevelsBackend {
     /// Side: server.
     /// The next clock time after [`level_clock_time`](Self::level_clock_time) at which the
     /// level's own clock reaches `marker`, a time marker of its timelines (as `/time set <marker>`
-    /// moves to it). None for a marker the clock does not define, a level without a default clock,
-    /// a stale handle and a client.
+    /// moves to it). Today only the Overworld's clock defines markers, so a level following any
+    /// other clock (a mod dimension's own) answers None for every marker. None too for a marker
+    /// the clock does not define, a time past `i64::MAX`, a level without a default clock, a stale
+    /// handle and a client.
     #[access(WorldOnly)]
     fn level_clock_marker_time(&self, level: LevelRef, marker: &Identifier) -> Option<i64>;
     /// Side: both.

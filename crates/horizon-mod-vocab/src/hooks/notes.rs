@@ -354,8 +354,8 @@ For mods that run where the world is simulated: a dedicated server, a LAN host, 
 - **`native_sleep_finished_time(dimension, current, new_time, adjustment)`**: enough players slept and `advance_time`
   is on (NeoForge's `SleepFinishedTimeEvent`). `adjustment`, a `ClockAdjustment`, starts as vanilla's
   `wake_up_from_sleep` marker; a mod may set `Absolute`, `Relative` or another `Marker`, read with
-  `level_clock_marker_time`. `new_time` is the vanilla morning, read only (contract 2). Resolved after every mod; a time
-  before `current` or an unknown marker keeps the morning. `native_time_skip` then hears the jump and may cancel it.
+  `level_clock_marker_time`. `new_time`: the morning, read only (contract 2). Level's own clock, resolved after every mod;
+  a time before `current` or past `i64::MAX`, or a marker that clock lacks (only the Overworld's has any), moves to the morning.
 - **`native_world_border_bounds_changed()`**: `/worldborder set` or `/worldborder add` changed the border size or started a timed size change.
 - **`native_world_border_center_changed()`**: `/worldborder center` moved the border center. It hears successful commands only.
 - **`native_spawn_change(pos, angle)`**: `/setworldspawn` moved the world's spawn point, after its position and rotation are applied.

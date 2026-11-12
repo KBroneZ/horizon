@@ -12,10 +12,16 @@ pub trait Hooks {
     /// another `Marker`; a later mod reads what an earlier one left.
     /// `new_time` is the morning vanilla resolved, read only, for a mod that
     /// computes from it. Contract version `2`: in version `1`, `new_time`
-    /// was the value a mod wrote; a time is now written as `Absolute`. The game resolves `adjustment`
-    /// once after every mod: a time before `current`, or a marker the clock
-    /// does not define, is refused, as `setTimeAddition` refuses one, and the
-    /// morning stays. On the server, only when the `advance_time` rule is on;
+    /// was the value a mod wrote; a time is now written as `Absolute`.
+    /// `current` and the result are times of the level's own clock (its
+    /// dimension type's default clock, else the Overworld's). The game
+    /// resolves `adjustment` once after every mod: a time before `current`,
+    /// a time past `i64::MAX`, or a marker the level's clock does not define
+    /// is refused, as `setTimeAddition` refuses one, and the clock moves to
+    /// the morning. Only the Overworld's clock defines markers today, so on
+    /// any other clock every `Marker`, vanilla's included, falls back to the
+    /// morning. When even the morning is past `i64::MAX`, `new_time` is
+    /// `current` and the clock stays. On the server, only when the `advance_time` rule is on;
     /// `native_time_skip` then hears the jump to the resolved time and may
     /// still cancel it. The players wake and the weather resets as usual
     /// either way. Set `canceled` and the clock is left where it is, as

@@ -884,7 +884,7 @@ impl Game<'_> {
     /// The time of the level's own clock (its dimension type's `default_clock`) in ticks: what the
     /// level's sky, spawning and beds go by, and what `/time` sets there. None for a level without
     /// a default clock, a stale handle and a client.
-    pub(super) fn level_clock_time(&self, level: LevelRef) -> Option<i64> {
+    pub(in crate::game) fn level_clock_time(&self, level: LevelRef) -> Option<i64> {
         self.native_level_read_world(level)?;
         if !self.is_logical_server() {
             return None;
@@ -892,17 +892,6 @@ impl Game<'_> {
         let dim = super::Dim::from_id(level.dimension_id());
         self.dimension_type_of(dim).default_clock.as_ref()?;
         Some(self.command_clock_time(&self.level_clock_name(dim)))
-    }
-    /// When the level's own clock next reaches `marker` (`/time set <marker>`'s resolution).
-    pub(super) fn level_clock_marker_time(
-        &self,
-        level: LevelRef,
-        marker: &mod_api::Identifier,
-    ) -> Option<i64> {
-        let now = self.level_clock_time(level)?;
-        let clock = self.level_clock_name(super::Dim::from_id(level.dimension_id()));
-        let marker = format!("{}:{}", marker.namespace(), marker.path());
-        self.clock_marker_time(&clock, &marker, now)
     }
 }
 

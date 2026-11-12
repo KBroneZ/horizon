@@ -13015,15 +13015,14 @@ impl Game<'_> {
                 .rules
                 .bool_at(horizon_client::gamerules::vanilla::ADVANCE_TIME)
             {
-                let t = self.world.day_time;
-                // SleepFinishedTimeEvent: the mods' ClockAdjustment (game/world/wake_time.rs).
-                let (target, mut cancel) = self.sleep_finished_target(t);
-                // A canceled event leaves the clock alone, so `native_time_skip` is not asked.
-                if !cancel {
+                // SleepFinishedTimeEvent on the level's own clock (game/world/wake_time.rs): None
+                // when a mod canceled, so `native_time_skip` is not asked, or no time fits.
+                if let Some((clock, t, target)) = self.sleep_finished_move() {
+                    let mut cancel = false;
                     self.native_time_skip(self.dim.id(), t, target, "sleep", &mut cancel);
-                }
-                if !cancel {
-                    self.world.day_time = target;
+                    if !cancel {
+                        self.set_command_clock_time(&clock, target);
+                    }
                 }
             }
             // Level.isRaining: the rain level is above 0.2.
