@@ -1226,7 +1226,7 @@ impl Game<'_> {
         }
         self.sync_ops(&lists);
         let anticheat = load_anticheat();
-        let anticheat_on = anticheat.enabled;
+        let anticheat_on = anticheat.is_some();
         let chat_filter = load_chat_filter();
         self.set_pvp_legacy_rules(load_combat());
         // Horizon's far ring (docs/hosting.md): server.toml's `max_view_distance`.
