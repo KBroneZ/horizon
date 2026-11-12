@@ -400,6 +400,16 @@ impl Game<'_> {
     pub(super) fn play_mouse(&mut self, button: MouseButton, pressed: bool) -> Result<()> {
         if pressed {
             self.pvp_click(button);
+            if self.screen == crate::game::Screen::Playing {
+                horizon_hooks::engine::mouse_press(match button {
+                    MouseButton::Left => horizon_hooks::Button::Left,
+                    MouseButton::Right => horizon_hooks::Button::Right,
+                    MouseButton::Middle => horizon_hooks::Button::Middle,
+                    MouseButton::Back => horizon_hooks::Button::Other(3),
+                    MouseButton::Forward => horizon_hooks::Button::Other(4),
+                    MouseButton::Other(n) => horizon_hooks::Button::Other(n),
+                });
+            }
         }
         if self.sleeping.is_some() {
             return Ok(());

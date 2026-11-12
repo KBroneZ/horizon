@@ -4289,7 +4289,9 @@ impl Game<'_> {
             C::DamageEvent(p) => {
                 let me = self.remote.as_ref().map(|r| r.entity_id);
                 let own = me == Some(p.id);
-                self.pvp_hurt(p.id, own, p.direct.map(|d| Some(d) == me));
+                let by_me = p.direct.map(|d| Some(d) == me);
+                self.pvp_hurt(p.id, own, by_me);
+                horizon_hooks::engine::hurt(&horizon_hooks::Hurt::new(p.id, own, by_me));
                 if own {
                     let (attacker, player) = own_hurt_attacker(p.cause, |id| {
                         self.mob_index
@@ -9494,7 +9496,9 @@ impl Game<'_> {
                 self.send(S::Attack(play::Attack {
                     id: self.mobs[i].id as i32,
                 }));
-                self.pvp_attacked(self.mobs[i].id as i32, distance);
+                let id = self.mobs[i].id as i32;
+                self.pvp_attacked(id, distance);
+                horizon_hooks::engine::attacked(&horizon_hooks::Attack::new(id, distance));
                 let (target, player) = (
                     self.mobs[i].id,
                     &*self.mobs[i].kind.id == "minecraft:player",
@@ -9531,7 +9535,9 @@ impl Game<'_> {
             && self.before_block(distance)
             && self.held_range_allows(distance)
         {
-            self.pvp_attacked(self.mobs[i].id as i32, distance);
+            let id = self.mobs[i].id as i32;
+            self.pvp_attacked(id, distance);
+            horizon_hooks::engine::attacked(&horizon_hooks::Attack::new(id, distance));
         }
         self.send_action(8);
         self.hand_strength.reset_attack();

@@ -105,6 +105,61 @@ pub trait Hooks: Sync {
     fn get_the_game(&self) -> Option<GetTheGame> {
         None
     }
+
+    /// The player whose turn it is attacked an entity and the attack reached it (vanilla's
+    /// `Minecraft.startAttack` sending `ServerboundInteractPacket`, or a spear's kinetic hit).
+    fn attacked(&self, _attack: &Attack) {}
+
+    /// The server reported that an entity was hurt (`ClientboundDamageEventPacket`).
+    fn hurt(&self, _hurt: &Hurt) {}
+
+    /// The player whose turn it is pressed a mouse button while playing, no screen open.
+    fn mouse_press(&self, _button: Button) {}
+}
+
+/// What [`Hooks::attacked`] gets.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct Attack {
+    /// The entity's network id.
+    pub entity: i32,
+    /// From the player's eyes to where the crosshair's ray met the entity's box, in blocks.
+    pub distance: f64,
+}
+
+impl Attack {
+    pub fn new(entity: i32, distance: f64) -> Self {
+        Self { entity, distance }
+    }
+}
+
+/// What [`Hooks::hurt`] gets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Hurt {
+    /// The hurt entity's network id.
+    pub entity: i32,
+    /// It is the player whose turn it is.
+    pub own: bool,
+    /// Whether that player caused it directly, when the packet names a direct cause.
+    pub by_me: Option<bool>,
+}
+
+impl Hurt {
+    pub fn new(entity: i32, own: bool, by_me: Option<bool>) -> Self {
+        Self { entity, own, by_me }
+    }
+}
+
+/// A mouse button, for [`Hooks::mouse_press`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Button {
+    Left,
+    Right,
+    Middle,
+    /// Another button, by the window system's number (back, forward and the rest).
+    Other(u16),
 }
 
 /// What [`Hooks::get_the_game`] answers. The texts are translation keys of the game's own strings
@@ -362,6 +417,27 @@ pub mod engine {
     pub fn get_the_game() -> Option<GetTheGame> {
         all().iter().find_map(|hooks| hooks.get_the_game())
     }
+
+    /// [`Hooks::attacked`], to every hook.
+    pub fn attacked(attack: &Attack) {
+        for hooks in all() {
+            hooks.attacked(attack);
+        }
+    }
+
+    /// [`Hooks::hurt`], to every hook.
+    pub fn hurt(hurt: &Hurt) {
+        for hooks in all() {
+            hooks.hurt(hurt);
+        }
+    }
+
+    /// [`Hooks::mouse_press`], to every hook.
+    pub fn mouse_press(button: Button) {
+        for hooks in all() {
+            hooks.mouse_press(button);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -386,6 +462,15 @@ mod tests {
         }
         fn activity(&self, now: Activity) {
             self.0.lock().unwrap().push(format!("{now:?}"));
+        }
+        fn attacked(&self, a: &Attack) {
+            self.0.lock().unwrap().push(format!("attacked {a:?}"));
+        }
+        fn hurt(&self, h: &Hurt) {
+            self.0.lock().unwrap().push(format!("hurt {h:?}"));
+        }
+        fn mouse_press(&self, button: Button) {
+            self.0.lock().unwrap().push(format!("press {button:?}"));
         }
         fn get_the_game(&self) -> Option<GetTheGame> {
             Some(GetTheGame {
@@ -622,6 +707,9 @@ mod tests {
         let mut models = Two(Default::default());
         engine::tick(&mut models);
         assert!(models.body_pose(3).is_some() && models.body_pose(7).is_some());
+        engine::attacked(&Attack::new(12, 2.5));
+        engine::hurt(&Hurt::new(12, false, Some(true)));
+        engine::mouse_press(Button::Other(4));
         assert_eq!(
             *RECORDER.0.lock().unwrap(),
             [
@@ -630,7 +718,10 @@ mod tests {
                 "published false",
                 "Menus",
                 "World { play: Singleplayer, dimension: Nether, mode: Creative }",
-                "frame 4"
+                "frame 4",
+                "attacked Attack { entity: 12, distance: 2.5 }",
+                "hurt Hurt { entity: 12, own: false, by_me: Some(true) }",
+                "press Other(4)"
             ]
         );
         assert_eq!(register(&Silent), Err(TooLate));
