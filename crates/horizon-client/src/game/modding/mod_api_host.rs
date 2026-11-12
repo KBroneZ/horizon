@@ -1,5 +1,6 @@
 use super::Game;
 use super::api_values::{TryIntoApi, TryIntoEngine};
+use horizon_world::registry::BlockStateId;
 use mod_api::{AttachmentAccess, BlockPos, Direction};
 use {
     horizon_mod_runtime::attachments::{ATTACHMENTS_KEY, attachment_compound},
@@ -365,7 +366,16 @@ impl mod_api::LevelHost for super::GameLevel<'_> {
         let [x, y, z] = fields.position;
         let key = (x, y, z);
         if self.world.block_entities.generation(&key) != Some(fields.generation) {
-            return None;
+            // The block entity of the break whose `block_drops` event is running: the removal
+            // took it out of the world, a read-only view of it is held until the event ends.
+            let held = self.world.block_entities.broken(&key, fields.generation)?;
+            let name = &self.facts.get(BlockStateId(held.state)).name;
+            return super::native_block_entity_refs::save_without_metadata(
+                self.world,
+                key,
+                &held.entity,
+                name,
+            );
         }
         let entity = self.world.block_entities.get(&key)?;
         let name = &self.facts.get(self.world.block(x, y, z)).name;

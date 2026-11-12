@@ -134,6 +134,18 @@ pub struct BlockEntities {
     /// The block entities moving pistons carry, by the moving piston's
     /// position (`carry`): out of the map until they land.
     carried: FxHashMap<Pos, carry::Carried>,
+    /// The block entity a player's break just removed, kept readable while that break's
+    /// `block_drops` listeners run (`hold_broken`), and dropped after (`release_broken`).
+    broken: Option<Broken>,
+}
+
+/// A removed block entity held for the `block_drops` event of its break: its position, the
+/// identity it had, the block state it belonged to and its data.
+pub struct Broken {
+    pub pos: Pos,
+    pub generation: u64,
+    pub state: u32,
+    pub entity: BlockEntity,
 }
 
 /// Storage-owned identity passed to attachment residency observers.
@@ -666,6 +678,34 @@ impl BlockEntities {
             self.boxes.insert(pos);
         }
         entity
+    }
+    /// Keep `entity`, just removed from `pos` where it had `generation` under block state `state`,
+    /// readable through [`Self::broken`] until [`Self::release_broken`]. The map and the
+    /// generations do not know it: a handle to it answers reads, and nothing else.
+    pub fn hold_broken(&mut self, pos: Pos, generation: u64, state: u32, entity: BlockEntity) {
+        self.broken = Some(Broken {
+            pos,
+            generation,
+            state,
+            entity,
+        });
+    }
+    /// The block entity [`Self::hold_broken`] holds, if it is the one at `pos` with `generation`.
+    pub fn broken(&self, pos: &Pos, generation: u64) -> Option<&Broken> {
+        self.broken
+            .as_ref()
+            .filter(|held| held.pos == *pos && held.generation == generation)
+    }
+    /// The generation of the block entity held at `pos`, if any.
+    pub fn broken_generation(&self, pos: &Pos) -> Option<u64> {
+        self.broken
+            .as_ref()
+            .filter(|held| held.pos == *pos)
+            .map(|held| held.generation)
+    }
+    /// Drop the held block entity: every handle to it is stale from now on.
+    pub fn release_broken(&mut self) {
+        self.broken = None;
     }
     /// `LevelChunk.removeBlockEntity`: the block entity and its slot.
     pub fn remove(&mut self, pos: &Pos) -> Option<BlockEntity> {

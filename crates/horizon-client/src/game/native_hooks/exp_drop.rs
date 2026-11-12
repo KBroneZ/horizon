@@ -45,11 +45,21 @@ impl GameLevel<'_> {
     ) -> (Option<mod_api::BlockEntityRef>, Option<mod_api::EntityRef>) {
         let at = [pos.x, pos.y, pos.z];
         let block_entity = self.api_level.and_then(|level| {
-            self.world.block_entities.get(&(pos.x, pos.y, pos.z))?;
-            let generation = self
+            // The one a player's break just removed stays held for its `block_drops` event.
+            let generation = if self
                 .world
                 .block_entities
-                .generation(&(pos.x, pos.y, pos.z))?;
+                .get(&(pos.x, pos.y, pos.z))
+                .is_some()
+            {
+                self.world
+                    .block_entities
+                    .generation(&(pos.x, pos.y, pos.z))?
+            } else {
+                self.world
+                    .block_entities
+                    .broken_generation(&(pos.x, pos.y, pos.z))?
+            };
             Some(mod_api::__private::game::block_entity_ref(
                 level, at, generation,
             ))
@@ -116,6 +126,7 @@ impl Game<'_> {
     ) -> crate::game::spill::BlockDrops {
         let breaker =
             if crate::game::api_values::block_state::block_listens(mod_api::HookId::ExpDrop, state)
+                || mod_api::__private::listened(mod_api::HookId::BlockDrops)
             {
                 breaker.and_then(|id| self.entity(id))
             } else {
