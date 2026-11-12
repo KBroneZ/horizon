@@ -21,14 +21,14 @@ const PARTS: [&dyn Hooks; 8] = [
     &horizon_official_servers::HOOKS,
     // "Playing Horizon" on the player's Discord profile.
     &horizon_discord::HOOKS,
-    // Open and Share for saved performance captures.
-    &horizon_perf_share::HOOKS,
     // The player's own name over their head in third person (docs/extras.md).
     &horizon_name_tag::HOOKS,
     // /pregen in the player's own worlds (docs/extras.md).
     &horizon_pregen::HOOKS,
     // Far terrain planned finer where a zoom looks (`lodZoomDetail`).
     &horizon_zoom_detail::HOOKS,
+    // Open and Share for saved performance captures.
+    &horizon_perf_share::HOOKS,
 ];
 /// Their settings, in the player's settings files.
 const STORES: [&dyn settings::Store; 4] = [
