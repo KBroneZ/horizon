@@ -12,7 +12,7 @@ use horizon_platform::hooks::{self, Hooks};
 use horizon_platform::{pages, settings};
 
 /// Every Horizon part in the game, in the order its hooks run.
-const PARTS: [&dyn Hooks; 5] = [
+const PARTS: [&dyn Hooks; 6] = [
     // The anonymous "I'm playing" ping.
     &horizon_heartbeat::HOOKS,
     // Play with Friends: `friend:` addresses join through its tunnel.
@@ -21,6 +21,8 @@ const PARTS: [&dyn Hooks; 5] = [
     &horizon_official_servers::HOOKS,
     // "Playing Horizon" on the player's Discord profile.
     &horizon_discord::HOOKS,
+    // Open and Share for saved performance captures.
+    &horizon_perf_share::HOOKS,
     // Auto-reconnect (docs/extras.md).
     &horizon_reconnect::HOOKS,
 ];
