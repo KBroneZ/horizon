@@ -1632,7 +1632,7 @@ mod tests {
     /// the prepared resources are missing (CI has no vanilla data).
     fn server_game(
         resources: &mut Option<std::sync::Arc<crate::game::Resources>>,
-    ) -> Option<Game<'_>> {
+    ) -> Option<Box<Game<'_>>> {
         use crate::game::{Audio, Options, Progress, Settings, load_resources};
         let root = std::env::var_os("HORIZON_TEST_RESOURCES")
             .map(std::path::PathBuf::from)
@@ -1681,7 +1681,7 @@ mod tests {
             std::sync::Arc::new(horizon_client::chunk::Chunk::empty(0, 0)),
         );
         game.streaming.forced.insert((0, 0));
-        Some(game)
+        Some(Box::new(game))
     }
 
     /// What one feeding made the level show.
@@ -1747,6 +1747,7 @@ mod tests {
     /// mouthful is a `minecraft:eat` game event. A silent mount eats
     /// noiselessly, drawing no pitch, and a locked baby grows not at all.
     #[test]
+    #[ignore = "daily"]
     fn feeding_a_mount_draws_from_its_own_random_and_posts_eat() {
         let mut resources = None;
         let Some(mut game) = server_game(&mut resources) else {

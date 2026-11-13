@@ -139,11 +139,6 @@ fn existing_fieldless_enum_layouts_match_baseline() {
         "ConfigKind"
     );
     assert_eq!(
-        <crate::content::payloads::ConnectionPhase as Wire>::layout(&mut vec![]),
-        0xf46e46bb704d5cc2,
-        "ConnectionPhase"
-    );
-    assert_eq!(
         <crate::client::extras::Corner as Wire>::layout(&mut vec![]),
         0x35279684102ee89d,
         "Corner"
@@ -481,21 +476,6 @@ fn existing_fieldless_enum_layouts_match_baseline() {
         "PathType"
     );
     assert_eq!(
-        <crate::content::payloads::PayloadDirection as Wire>::layout(&mut vec![]),
-        0x389907f5b5c09dfc,
-        "PayloadDirection"
-    );
-    assert_eq!(
-        <crate::content::payloads::PayloadPhase as Wire>::layout(&mut vec![]),
-        0x5d2ee1d25cc9ec33,
-        "PayloadPhase"
-    );
-    assert_eq!(
-        <crate::content::payloads::PeerPolicy as Wire>::layout(&mut vec![]),
-        0xa4b0600dc6d16d0a,
-        "PeerPolicy"
-    );
-    assert_eq!(
         <crate::command::types::PermissionLevel as Wire>::layout(&mut vec![]),
         0x8cf4faa1014b6781,
         "PermissionLevel"
@@ -532,7 +512,7 @@ fn existing_fieldless_enum_layouts_match_baseline() {
     );
     assert_eq!(
         <crate::ProvidedBy as Wire>::layout(&mut vec![]),
-        0x5d265204eef1d102,
+        0xfe10e188155f9b86,
         "ProvidedBy"
     );
     assert_eq!(
@@ -544,6 +524,11 @@ fn existing_fieldless_enum_layouts_match_baseline() {
         <crate::world::types::RaidStatus as Wire>::layout(&mut vec![]),
         0x1b3564307af64391,
         "RaidStatus"
+    );
+    assert_eq!(
+        <crate::block::rail_shape::RailShape as Wire>::layout(&mut vec![]),
+        0xd5b1c18674ac3799,
+        "RailShape"
     );
     assert_eq!(
         <crate::content::content_declarations::Rarity as Wire>::layout(&mut vec![]),
@@ -597,7 +582,7 @@ fn existing_fieldless_enum_layouts_match_baseline() {
     );
     assert_eq!(
         <crate::item::crafting::Shape as Wire>::layout(&mut vec![]),
-        0xa157d010a4183033,
+        0x004a43af941b0c62,
         "Shape"
     );
     assert_eq!(

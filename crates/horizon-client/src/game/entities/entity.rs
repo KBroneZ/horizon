@@ -20,11 +20,11 @@ use horizon_client::entity_rules::EntityRules;
 use horizon_client::join_seq::JoinSeq;
 use horizon_client::join_seq::Joined as _;
 use horizon_client::mobs::{Mob, Species};
-use horizon_client::projectiles::Projectile;
+use horizon_client::projectiles::{Projectile, ProjectileKind};
 use horizon_core::geometry::{Aabb, Direction, Vec3};
 use horizon_core::nbt::Tag;
 use horizon_core::position::BlockPos;
-use horizon_world::{level::data::PushReaction, piston_push};
+use horizon_world::{level::data::PushReaction, move_gate::MoveGate, piston_push};
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
@@ -300,11 +300,15 @@ pub(super) trait Entity: EntityRules {
     fn portal_sweeps(&self) -> bool {
         true
     }
-    /// `Entity.move(MoverType.PISTON, …)` once the movement is resolved.
-    fn move_by_piston(&mut self, movement: Vec3) {
-        let position = self.position_mut();
-        *position = position.add_vector(movement);
+    /// `Entity.noPhysics` between ticks: its moves pass through the blocks,
+    /// and a shulker's lid leaves it be.
+    fn no_physics(&self) -> bool {
+        false
     }
+    /// Apply this kind's resolved movement after the invocation's gate is armed.
+    /// Every entity kind states how it moves; family ticks resolve through
+    /// the same gate in their own movement path.
+    fn move_entity(&mut self, gate: &mut MoveGate, movement: Vec3);
     /// Bounds for `AbstractArrow.shouldFall` after a non-SELF piston move.
     fn piston_release_bounds(&self) -> Option<Aabb> {
         None
@@ -937,10 +941,12 @@ impl Game<'_> {
         splash: &mut impl FnMut(horizon_client::entities::ItemSplash),
     ) -> (bool, bool) {
         let no_physics = escape_speed.is_some();
+        // Entity.baseTick splashes before moving, except on the first tick, at
+        // the motion before the currents push it.
+        let before = item.velocity;
         let heights =
             item.push_by_fluid(&self.world, &self.res.motion().fluids, &self.loop_context);
-        // Entity.baseTick splashes before moving, except on the first tick.
-        item.water_entry(heights.0 > 0.0, item.ticks == 0, splash);
+        item.water_entry(heights.0 > 0.0, item.ticks == 0, before, splash);
         item.lava_fall(heights.1 > 0.0);
         let mut step = item.tick_move_before_block_effects(
             &self.world,
@@ -952,6 +958,7 @@ impl Game<'_> {
             entity_boxes,
             Some(self.border.geometry()),
             Some(&self.res.motion().blocks),
+            &self.loop_context,
         );
         item.check_fall(&mut step, |fall, from, moved| {
             self.vehicle_fall_reset(fall, from, moved)
@@ -1007,11 +1014,18 @@ impl Game<'_> {
             self.res.facts(),
             self.collision,
         );
-        let alive = item.tick_settle(&self.world, self.res.facts(), no_physics, step);
+        let alive = item.tick_settle(
+            &self.world,
+            self.res.facts(),
+            no_physics,
+            step,
+            &self.loop_context,
+        );
         // ItemEntity.tick refreshes immersion and splashes on water entry.
+        let before = item.velocity;
         let (water, _) =
             item.push_by_fluid(&self.world, &self.res.motion().fluids, &self.loop_context);
-        item.water_entry(water > 0.0, false, splash);
+        item.water_entry(water > 0.0, false, before, splash);
         (alive, false)
     }
 }
@@ -1248,22 +1262,10 @@ macro_rules! with_entity {
 }
 pub(super) use with_entity;
 
-macro_rules! borrow_lists {
-    (($game:expr) $($kind:ident($ty:ty) $field:ident: $($list:ident).+,)*) => {
-        $crate::game::entity::EntityLists {
-            $($field: &$game$(.$list)+,)*
-        }
-    };
-}
-pub(crate) use borrow_lists;
-
-/// `$game`'s [`EntityLists`]; a macro so the borrow stays field by field.
-macro_rules! entity_lists_of {
-    ($game:expr) => {
-        $crate::game::entity::entity_lists!(borrow_lists, $game)
-    };
-}
-pub(super) use entity_lists_of;
+#[path = "entity/list_borrows.rs"]
+mod list_borrows;
+pub(super) use list_borrows::entity_lists_of;
+pub(crate) use list_borrows::{borrow_level_list, borrow_lists};
 /// The level `$game` ticks, lent to a hit's damage hooks with its block registry and merged
 /// tag tables, so a mob or the player beside them can take the hit. With `$attack` (an
 /// [`Attack`](horizon_client::health::Attack) the site took first), the level of that attack.
@@ -1532,7 +1534,10 @@ impl Entity for Mob {
     }
     /// `Entity.move(MoverType.PISTON, ...)` ends in `setPos`, which `Shulker`
     /// overrides to snap to the block centre.
-    fn move_by_piston(&mut self, movement: Vec3) {
+    fn move_entity(&mut self, gate: &mut MoveGate, movement: Vec3) {
+        if gate.skipped() {
+            return;
+        }
         let moved = self.position.add_vector(movement);
         if self.species() == Species::Shulker {
             crate::mobs::shulker::client_set_pos(self, moved.x, moved.y, moved.z);
@@ -1661,6 +1666,13 @@ impl Entity for ItemEntity {
     fn reset_fall_distance(&mut self) {
         self.fall_distance = 0.0;
     }
+    fn move_entity(&mut self, gate: &mut MoveGate, movement: Vec3) {
+        if gate.skipped() {
+            return;
+        }
+        let position = self.position_mut();
+        *position = position.add_vector(movement);
+    }
 
     fn set_on_ground(&mut self, on_ground: bool) {
         self.on_ground = on_ground;
@@ -1742,6 +1754,13 @@ impl Entity for ExperienceOrb {
     fn reset_fall_distance(&mut self) {
         // An orb keeps no fall distance here.
     }
+    fn move_entity(&mut self, gate: &mut MoveGate, movement: Vec3) {
+        if gate.skipped() {
+            return;
+        }
+        let position = self.position_mut();
+        *position = position.add_vector(movement);
+    }
 
     fn set_on_ground(&mut self, on_ground: bool) {
         self.on_ground = on_ground;
@@ -1813,6 +1832,13 @@ impl Entity for ExperienceOrb {
 impl Entity for Boat {
     fn reset_fall_distance(&mut self) {
         // A boat keeps no fall distance here.
+    }
+    fn move_entity(&mut self, gate: &mut MoveGate, movement: Vec3) {
+        if gate.skipped() {
+            return;
+        }
+        let position = self.position_mut();
+        *position = position.add_vector(movement);
     }
 
     fn set_on_ground(&mut self, on_ground: bool) {
@@ -1901,6 +1927,13 @@ impl Entity for Boat {
 impl Entity for Minecart {
     fn reset_fall_distance(&mut self) {
         self.fall_distance = 0.0;
+    }
+    fn move_entity(&mut self, gate: &mut MoveGate, movement: Vec3) {
+        if gate.skipped() {
+            return;
+        }
+        let position = self.position_mut();
+        *position = position.add_vector(movement);
     }
 
     fn set_on_ground(&mut self, on_ground: bool) {
@@ -2000,6 +2033,13 @@ impl Entity for ArmorStand {
     fn reset_fall_distance(&mut self) {
         self.enchantment_fall_distance = 0.0;
     }
+    fn move_entity(&mut self, gate: &mut MoveGate, movement: Vec3) {
+        if gate.skipped() {
+            return;
+        }
+        let position = self.position_mut();
+        *position = position.add_vector(movement);
+    }
 
     fn set_on_ground(&mut self, on_ground: bool) {
         self.on_ground = on_ground;
@@ -2019,7 +2059,7 @@ impl Entity for ArmorStand {
         ArmorStand::fluid_eye_y(self)
     }
     fn native_type(&self) -> Cow<'static, str> {
-        "minecraft:armor_stand".into()
+        super::armor_stands::TYPE_ID.into()
     }
     fn save_nbt(
         game: &mut Game<'_>,
@@ -2104,6 +2144,10 @@ impl Entity for ArmorStand {
     fn pushed_by_explosion(&self) -> bool {
         false
     }
+    /// A marker and a NoGravity stand have no physics (`noPhysics`).
+    fn no_physics(&self) -> bool {
+        self.marker || self.no_gravity
+    }
     /// `ArmorStand.getPistonPushReaction`: a marker is ignored.
     fn get_piston_push_reaction(&self) -> PushReaction {
         if self.marker {
@@ -2117,6 +2161,13 @@ impl Entity for ArmorStand {
 impl Entity for PrimedTnt {
     fn reset_fall_distance(&mut self) {
         // Primed TNT keeps no fall distance here.
+    }
+    fn move_entity(&mut self, gate: &mut MoveGate, movement: Vec3) {
+        if gate.skipped() {
+            return;
+        }
+        let position = self.position_mut();
+        *position = position.add_vector(movement);
     }
 
     fn set_on_ground(&mut self, on_ground: bool) {
@@ -2198,6 +2249,13 @@ impl Entity for PrimedTnt {
 impl Entity for FallingBlock {
     fn reset_fall_distance(&mut self) {
         self.fall_distance = 0.0;
+    }
+    fn move_entity(&mut self, gate: &mut MoveGate, movement: Vec3) {
+        if gate.skipped() {
+            return;
+        }
+        let position = self.position_mut();
+        *position = position.add_vector(movement);
     }
     fn rotation(&self) -> [f32; 2] {
         self.rotation
@@ -2412,7 +2470,15 @@ impl Entity for Projectile {
     fn bounds(&self) -> Aabb {
         Projectile::bounds(self)
     }
-    fn move_by_piston(&mut self, movement: Vec3) {
+    /// A shulker bullet's, set when it is made; an arrow's `AbstractArrow.noPhysics`.
+    fn no_physics(&self) -> bool {
+        matches!(self.kind, ProjectileKind::ShulkerBullet { .. })
+            || self.arrow.as_ref().is_some_and(|a| a.no_physics)
+    }
+    fn move_entity(&mut self, gate: &mut MoveGate, movement: Vec3) {
+        if gate.skipped() {
+            return;
+        }
         Projectile::move_by_piston(self, movement);
     }
     fn piston_release_bounds(&self) -> Option<Aabb> {
@@ -2429,6 +2495,13 @@ impl Entity for Projectile {
 impl Entity for Rocket {
     fn reset_fall_distance(&mut self) {
         // A firework rocket keeps no fall distance here.
+    }
+    fn move_entity(&mut self, gate: &mut MoveGate, movement: Vec3) {
+        if gate.skipped() {
+            return;
+        }
+        let position = self.position_mut();
+        *position = position.add_vector(movement);
     }
     fn rotation(&self) -> [f32; 2] {
         self.rotation
@@ -2591,7 +2664,14 @@ impl Entity for ThrownTrident {
             Vec3::new(p.x + 0.25, p.y + 0.5, p.z + 0.25),
         )
     }
-    fn move_by_piston(&mut self, movement: Vec3) {
+    /// `AbstractArrow.noPhysics`, set once a loyal trident turns back.
+    fn no_physics(&self) -> bool {
+        self.no_physics
+    }
+    fn move_entity(&mut self, gate: &mut MoveGate, movement: Vec3) {
+        if gate.skipped() {
+            return;
+        }
         ThrownTrident::move_by_piston(self, movement);
     }
     fn piston_release_bounds(&self) -> Option<Aabb> {
@@ -2880,6 +2960,7 @@ mod set_rotation_tests {
     fn set_rotation_keeps_yaw_and_clamps_pitch_on_kinds_that_had_none() {
         let mut orb = ExperienceOrb {
             attachment_lifetime: Default::default(),
+            fall_distance: 0.0,
             join: Default::default(),
             no_gravity: false,
             id: 0,
@@ -2892,6 +2973,7 @@ mod set_rotation_tests {
             count: 1,
             ticks: 0,
             health: 5,
+            air: 300,
             rotation: [0.0, 0.0],
             following: None,
         };

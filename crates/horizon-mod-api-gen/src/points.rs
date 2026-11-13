@@ -39,6 +39,9 @@ pub struct GamePoint {
     pub return_ty: String,
     /// Whether its API listeners run at the return: not when the value returned borrows.
     pub at_return: bool,
+    /// [`mod_surface::contract_hash`] of everything above but the name: equal hashes on
+    /// two builds, the same point for a mod's `[[inject]]` row.
+    pub signature_hash: String,
     #[serde(skip)]
     record_item: String,
     /// Its typed function constructors, place ids and dispatch functions
@@ -65,6 +68,7 @@ impl GamePoint {
     pub(crate) fn new(shape: point_shape::Shape, found: &Found<'_>, target: String) -> Self {
         let api = shape.api_items(&target);
         GamePoint {
+            signature_hash: String::new(),
             record_item: if shape.api() {
                 shape.record_item(&target).to_string()
             } else {
@@ -107,6 +111,23 @@ impl GamePoint {
             },
             name: shape.name,
         }
+        .hashed()
+    }
+
+    /// The point with its [`GamePoint::signature_hash`] filled in.
+    fn hashed(mut self) -> Self {
+        self.signature_hash = mod_surface::contract_hash(&(
+            &self.target,
+            self.side,
+            self.host,
+            &self.record,
+            &self.args,
+            self.returns,
+            &self.return_ty,
+            self.at_return,
+            &self.api_refusal,
+        ));
+        self
     }
 }
 
@@ -441,7 +462,12 @@ impl Scanned {
         // A point is installed through its function's replacement cell: only a replaceable
         // function has one.
         let none = std::collections::BTreeSet::new();
-        let replaceable = crate::replace::targets(&self.module, &self.parsed, &none, &none);
+        let replaceable = crate::replace::targets(
+            &self.module,
+            &self.parsed,
+            &none,
+            &crate::replace::OwnerTypes::default(),
+        );
         for found in &mut out {
             // Only the game's own crate has the conversions a mirror goes through.
             found.mirrors = mirrors(found.sig, &uses, wire, self.package.is_none());
@@ -763,10 +789,14 @@ pub(crate) fn stage_with_manifest(
         out.push_str(&source[from..]);
         fs::write(&file.path, out).map_err(|e| format!("{}: {e}", file.path.display()))?;
         staged.files += 1;
-        if staged.points != points_before
-            && let Some(package) = &file.package
-        {
-            packages.insert(package.clone());
+        // The game crate names the points' table only in a staged copy, so its normal manifest
+        // carries no dependency on it: the pass adds one, as it does for a marked lower crate.
+        if staged.points != points_before {
+            packages.insert(
+                file.package
+                    .clone()
+                    .unwrap_or_else(|| root.join("crates/horizon-client")),
+            );
         }
     }
     dependencies(root, packages)?;
@@ -802,7 +832,13 @@ pub(crate) fn dependencies(
             .as_table_mut()
             .ok_or("[dependencies] is not a table")?;
         // Every package with points sits in `crates/`, beside these two.
-        for name in ADDED {
+        // The engine already imports vocabulary as mod_api. Do not add the
+        // platform under its default lib name as a second, conflicting mod_api.
+        let added: Vec<_> = ADDED
+            .into_iter()
+            .filter(|name| *name != "horizon-mod-api" || !dependencies.contains_key("mod_api"))
+            .collect();
+        for &name in &added {
             dependencies.entry(name).or_insert_with(|| {
                 toml::Value::Table(toml::Table::from_iter([(
                     "path".to_owned(),
@@ -816,7 +852,7 @@ pub(crate) fn dependencies(
             .and_then(toml::Value::as_str)
             .ok_or_else(|| format!("{}: no package name", manifest.display()))?
             .to_owned();
-        lock = locked_with(&lock, &name, &ADDED)
+        lock = locked_with(&lock, &name, &added)
             .ok_or_else(|| format!("Cargo.lock has no entry for {name}"))?;
         fs::write(
             &manifest,
@@ -830,7 +866,7 @@ pub(crate) fn dependencies(
 
 /// `lock` with `added` in the dependency list of the package `name`, kept in the lock file's
 /// sorted order; none when the lock file has no entry for it.
-fn locked_with(lock: &str, name: &str, added: &[&str]) -> Option<String> {
+pub(crate) fn locked_with(lock: &str, name: &str, added: &[&str]) -> Option<String> {
     let header = format!("[[package]]\nname = \"{name}\"\n");
     let start = lock.find(&header)?;
     let end = lock[start + header.len()..]
@@ -1069,6 +1105,55 @@ mod tests {
     use super::*;
 
     #[test]
+    fn staging_keeps_engine_vocabulary_without_platform() {
+        let root = std::env::temp_dir().join(format!("point-vocabulary-{}", std::process::id()));
+        let package = root.join("crates/engine");
+        std::fs::create_dir_all(&package).unwrap();
+        std::fs::write(package.join("Cargo.toml"), "[package]\nname = 'engine'\n[dependencies]\nmod_api = { package = 'horizon-mod-vocab', path = '../horizon-mod-vocab' }\n").unwrap();
+        std::fs::write(root.join("Cargo.lock"), "[[package]]\nname = \"engine\"\nversion = \"0.1.0\"\ndependencies = [\n \"horizon-mod-vocab\",\n]\n").unwrap();
+        dependencies(&root, std::collections::BTreeSet::from([package.clone()])).unwrap();
+        let manifest = std::fs::read_to_string(package.join("Cargo.toml")).unwrap();
+        let parsed: toml::Table = toml::from_str(&manifest).unwrap();
+        let deps = parsed["dependencies"].as_table().unwrap();
+        assert!(deps.contains_key("mod_api"));
+        assert!(deps.contains_key("horizon-mod-points"));
+        assert!(!deps.contains_key("horizon-mod-api"));
+        assert!(
+            !std::fs::read_to_string(root.join("Cargo.lock"))
+                .unwrap()
+                .contains("\"horizon-mod-api\"")
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_points_signature_hash_follows_its_signature_not_its_name() {
+        let point = |name: &str, ty: &str| {
+            GamePoint {
+                api_refusal: None,
+                name: name.into(),
+                target: "game::tick".into(),
+                side: "server",
+                host: "server",
+                record: "TickRecord".into(),
+                args: vec![("count".into(), ty.into())],
+                returns: "cancel",
+                return_ty: "()".into(),
+                at_return: false,
+                signature_hash: String::new(),
+                record_item: String::new(),
+                api: Default::default(),
+            }
+            .hashed()
+            .signature_hash
+        };
+        let base = point("tick", "u32");
+        assert_eq!(base.len(), 32);
+        assert_eq!(point("renamed", "u32"), base);
+        assert_ne!(point("tick", "u64"), base);
+    }
+
+    #[test]
     fn selected_guest_exports_keep_the_full_layout() {
         let make = |name: &str| {
             let sig: syn::Signature = syn::parse_str(&format!("fn {name}()")).unwrap();
@@ -1085,6 +1170,7 @@ mod tests {
                 returns: "cancel",
                 return_ty: "()".into(),
                 at_return: true,
+                signature_hash: String::new(),
                 record_item: shape.record_item(name).to_string(),
                 api: [
                     api.listeners.to_string(),
@@ -1123,6 +1209,7 @@ mod tests {
     /// The census: how many points have an API record, and why the others refuse.
     /// `POINT_INVENTORY=path` writes every point's name, target and refusal.
     #[test]
+    #[ignore = "daily"]
     fn point_inventory() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let points = game_points(&root).unwrap();
@@ -1159,6 +1246,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "daily"]
     fn no_wire_public_values_refuse_before_point_record_emission() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let wire = crate::build::wire_types(&root).unwrap();
@@ -1521,7 +1609,7 @@ name = 'horizon-mod-api-gen'
         put(
             "Cargo.lock",
             // CRLF, as a Windows checkout writes it.
-            &"version = 4\n\n[[package]]\nname = \"horizon-client-render\"\nversion = \"0.1.0\"\ndependencies = [\n \"log\",\n]\n\n[[package]]\nname = \"log\"\nversion = \"0.4.0\"\n"
+            &"version = 4\n\n[[package]]\nname = \"horizon-client\"\nversion = \"0.1.0\"\n\n[[package]]\nname = \"horizon-client-render\"\nversion = \"0.1.0\"\ndependencies = [\n \"log\",\n]\n\n[[package]]\nname = \"log\"\nversion = \"0.4.0\"\n"
                 .replace('\n', "\r\n"),
         );
         put(
@@ -1667,6 +1755,15 @@ name = 'horizon-mod-api-gen'
         assert!(!mesher.contains("point("), "{mesher}");
         let manifest = std::fs::read_to_string(render.join("Cargo.toml")).unwrap();
         assert!(!manifest.contains("horizon-mod-points"), "{manifest}");
+        // The game crate's points name the table: the staged copy gives it the dependency.
+        let client =
+            std::fs::read_to_string(root.join("crates/horizon-client/Cargo.toml")).unwrap();
+        assert!(client.contains("horizon-mod-points"), "{client}");
+        let lock = std::fs::read_to_string(root.join("Cargo.lock")).unwrap();
+        assert!(
+            lock.contains("name = \"horizon-client\"\nversion = \"0.1.0\"\ndependencies = [\n \"horizon-mod-api\",\n \"horizon-mod-api-macros\",\n \"horizon-mod-points\",\n]"),
+            "{lock}"
+        );
         // A second pass finds the attribute and refuses: the source tree never carries one.
         assert!(
             stage_with(&root, &WireTypes::new())

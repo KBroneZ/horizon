@@ -1,4 +1,6 @@
 use super::*;
+#[path = "mod_content_item_metadata_tests.rs"]
+mod item_metadata_tests;
 use crate::{assets::Assets, blocks::BlockFacts, crafting::CraftingRemainder, items::Items};
 use horizon_mod_package::manifest::JarRef;
 use horizon_world::native_load_context::DataLoadOrigin;
@@ -1420,14 +1422,7 @@ fn content_root_loads_with_every_table() {
 
     let defaults = horizon_world::item_defaults::read(&root).unwrap();
     let items = Items::load(&root, new, &facts, &overlay, &defaults).unwrap();
-    let ruby_block = &items.items["ruby:ruby_block"];
-    assert_eq!(ruby_block.block, Some(ruby));
-    let iron_block = &items.items["minecraft:iron_block"];
-    assert_eq!((ruby_block.max_stack, iron_block.max_stack), (16, 64));
-    assert!(ruby_block.fire_resistant && !iron_block.fire_resistant);
-    let gem = &items.items["ruby:ruby"];
-    assert_eq!(gem.max_stack, 16);
-    assert_eq!(gem.block, Some(BlockStateId(n + 65)));
+    item_metadata_tests::assert_metadata(&root, &items, &defaults, ruby, n);
     let binding = independent_behaviours.item_binding("ruby:ruby").unwrap();
     assert_eq!(
         binding.block,
@@ -2071,11 +2066,11 @@ fn content_root_carries_a_structure_mod() {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, text).unwrap();
     }
-    // The template: vanilla's smallest plains house, as the mod's own file.
-    let house =
-        base.join("worldgen/structure/minecraft/village/plains/houses/plains_small_house_1.nbt");
+    // The vanilla house's bytes belong to the mod; prepared file permissions do not.
+    let houses = base.join("worldgen/structure/minecraft/village/plains/houses");
+    let template = fs::read(houses.join("plains_small_house_1.nbt")).unwrap();
     fs::create_dir_all(dir.join("data/huts/structure")).unwrap();
-    fs::copy(&house, dir.join("data/huts/structure/hut.nbt")).unwrap();
+    fs::write(dir.join("data/huts/structure/hut.nbt"), template).unwrap();
     let package = horizon_mod_package::Package::read(&dir).unwrap();
     let m = ContentMod {
         id: "huts".into(),
@@ -2875,10 +2870,10 @@ fn conditional_tag_layers_replace_only_when_server_inventory_accepts_them() {
             )
         })
         .collect();
-    let inventory = |side: Option<horizon_mod_package::Side>| {
+    let inventory = |side: Option<mod_api::Side>| {
         horizon_mod_package::enabled::EnabledMods::new(
             mods.iter()
-                .map(|m| (m.id.clone(), horizon_mod_package::Side::Both))
+                .map(|m| (m.id.clone(), mod_api::Side::Both))
                 .chain(side.map(|side| ("code_only".into(), side))),
         )
     };
@@ -2896,7 +2891,7 @@ fn conditional_tag_layers_replace_only_when_server_inventory_accepts_them() {
         Path::new(""),
         &mods,
         &cache,
-        &inventory(Some(horizon_mod_package::Side::Both)),
+        &inventory(Some(mod_api::Side::Both)),
     )
     .unwrap();
     assert_ne!(on, off, "code-only IDs invalidate the flattened tag cache");
@@ -2910,7 +2905,7 @@ fn conditional_tag_layers_replace_only_when_server_inventory_accepts_them() {
         Path::new(""),
         &mods,
         &cache,
-        &inventory(Some(horizon_mod_package::Side::Client)),
+        &inventory(Some(mod_api::Side::Client)),
     )
     .unwrap();
     assert_eq!(read(&client)["values"], read(&off)["values"]);
@@ -6821,7 +6816,7 @@ fn roots_unused_for_a_day_are_removed() {
 fn fixture_inventory(mods: &[ContentMod]) -> horizon_mod_package::enabled::EnabledMods {
     horizon_mod_package::enabled::EnabledMods::new(
         mods.iter()
-            .map(|package| (package.id.clone(), horizon_mod_package::Side::Both)),
+            .map(|package| (package.id.clone(), mod_api::Side::Both)),
     )
 }
 fn build_fixture(base: &Path, jars: &Path, mods: &[ContentMod], out: &Path) -> Result<Vec<String>> {

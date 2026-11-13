@@ -11,6 +11,10 @@ macro_rules! arc_handler {
         impl Wire for Arc<$handler> {
             const LAYOUT_SEED: u64 = crate::wire::layout_name(concat!("Arc<dyn ", $name, ">"));
             const MIN: usize = 8;
+            fn layout(_: &mut Vec<&'static str>) -> u64 {
+                crate::wire::reached_resource();
+                Self::LAYOUT_SEED
+            }
             fn put(&self, out: &mut Writer) {
                 out.put_resource(Box::new(self.clone()));
             }
@@ -22,10 +26,14 @@ macro_rules! arc_handler {
 }
 macro_rules! handler {
     ($handler:ty, $name:literal) => {
-        arc_handler!($handler, $name);
+        $crate::wire::wire_handlers::arc_handler!($handler, $name);
         impl Wire for Box<$handler> {
             const LAYOUT_SEED: u64 = crate::wire::layout_name(concat!("Box<dyn ", $name, ">"));
             const MIN: usize = 8;
+            fn layout(_: &mut Vec<&'static str>) -> u64 {
+                crate::wire::reached_resource();
+                Self::LAYOUT_SEED
+            }
             fn put(&self, out: &mut Writer) {
                 out.fail(WireError::Invalid("boxed handler needs owned encoding"));
             }
@@ -38,6 +46,10 @@ macro_rules! handler {
         }
     };
 }
+// New callback traits invoke this same resource codec at their declaration,
+// rather than adding another entry to this legacy shared list.
+pub(crate) use {arc_handler, handler};
+
 handler!(dyn Hooks, "Hooks");
 handler!(dyn ReloadApply, "ReloadApply");
 handler!(dyn StructureType, "StructureType");
@@ -72,6 +84,7 @@ handler!(
     "ResourceHandler<FluidResource>"
 );
 handler!(dyn EnergyHandler, "EnergyHandler");
+handler!(dyn ItemStorage, "ItemStorage");
 handler!(
     dyn BlockCapabilityProvider<dyn ResourceHandler<ItemResource>>,
     "BlockCapabilityProvider<dyn ResourceHandler<ItemResource>>"
@@ -83,6 +96,10 @@ handler!(
 handler!(
     dyn BlockCapabilityProvider<dyn EnergyHandler>,
     "BlockCapabilityProvider<dyn EnergyHandler>"
+);
+handler!(
+    dyn BlockCapabilityProvider<dyn ItemStorage>,
+    "BlockCapabilityProvider<dyn ItemStorage>"
 );
 handler!(
     dyn ItemCapabilityProvider<dyn ResourceHandler<ItemResource>>,

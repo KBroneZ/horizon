@@ -756,8 +756,12 @@ pub fn default_gateway() -> Option<Ipv4Addr> {
     }
     #[cfg(windows)]
     {
+        // A program without a console of its own (the launcher) opens none for `route`.
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         let out = std::process::Command::new("route")
             .args(["print", "-4", "0.0.0.0"])
+            .creation_flags(CREATE_NO_WINDOW)
             .output()
             .ok()?;
         windows_gateway(&String::from_utf8_lossy(&out.stdout))
@@ -1087,6 +1091,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "daily"]
     fn nothing_answering_says_why() {
         let quiet = UdpSocket::bind("127.0.0.1:0").unwrap();
         let targets = Targets {

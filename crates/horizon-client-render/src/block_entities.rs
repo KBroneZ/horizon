@@ -80,8 +80,13 @@ pub struct BlockEntities {
     generations: FxHashMap<Pos, u64>,
     on_load: std::collections::VecDeque<(Pos, u64)>,
     on_load_enabled: bool,
-    attachments: HashMap<Pos, Attachments>,
+    attachments: FxHashMap<Pos, Attachments>,
     attachment_observer: Option<Arc<dyn AttachmentObserver<BlockEntityIdentity>>>,
+    /// While a transaction is open (`defer_retirement`): the maps of block entities it
+    /// removed or replaced, still bound to their index entries, by position and generation.
+    /// The root commit retires them (`publish_retirement`); an abort puts back the ones it
+    /// restores (`put_back_attachments`) first.
+    retiring: Option<Vec<(Pos, u64, Attachments)>>,
     /// `Level.blockEntityTickers`: positions and the slot each was given.
     tickers: Arc<Vec<(Pos, u32)>>,
     /// `LevelChunk.tickersInLevel`: the live slot of each ticking position.
@@ -127,10 +132,25 @@ pub struct BlockEntities {
     /// instance blocks, `shows_box`), so a frame looks at them without scanning the map.
     /// Like `mods`, one taken out stays listed until `put` or `remove`.
     boxes: FxHashSet<Pos>,
+    /// The signs a player's editor is on (`SignBlockEntity.playerWhoMayEdit`
+    /// set), so the level's tick checks those alone instead of every sign.
+    sign_editors: FxHashSet<Pos>,
     asleep: FxHashSet<Pos>,
     /// The block entities moving pistons carry, by the moving piston's
     /// position (`carry`): out of the map until they land.
     carried: FxHashMap<Pos, carry::Carried>,
+    /// The API snapshots a client's mod block entities are ticked with
+    /// (`take_client_snapshots`), by position.
+    client_snapshots: FxHashMap<Pos, ClientSnapshot>,
+}
+
+/// A client copy of a mod block entity as its client tick shows it to mods: made once for each
+/// revision of the copy (an update merged into it is a new one), not once a tick.
+pub struct ClientSnapshot {
+    /// The copy's revision the snapshot was made from.
+    pub revision: crate::chunk::block_entity::ModRevision,
+    /// The snapshot, or `None` when that revision could not be made into one.
+    pub entity: Option<mod_api::ModBlockEntity>,
 }
 
 /// Storage-owned identity passed to attachment residency observers.
@@ -149,7 +169,7 @@ fn identity(pos: Pos, generations: &FxHashMap<Pos, u64>) -> BlockEntityIdentity 
 }
 
 fn retire_attachments(
-    maps: &mut HashMap<Pos, Attachments>,
+    maps: &mut FxHashMap<Pos, Attachments>,
     observer: Option<&Arc<dyn AttachmentObserver<BlockEntityIdentity>>>,
     generations: &FxHashMap<Pos, u64>,
     pos: &Pos,
@@ -164,6 +184,7 @@ fn retire_attachments(
 
 impl Drop for BlockEntities {
     fn drop(&mut self) {
+        self.publish_retirement();
         self.unload_attachments();
     }
 }
@@ -338,6 +359,16 @@ impl BlockEntities {
         }
     }
 
+    /// The client tick snapshots, lent for one pass over the tickers: give them back with
+    /// `keep_client_snapshots`.
+    pub fn take_client_snapshots(&mut self) -> FxHashMap<Pos, ClientSnapshot> {
+        std::mem::take(&mut self.client_snapshots)
+    }
+    /// Takes back what `take_client_snapshots` lent, without the positions that no longer tick.
+    pub fn keep_client_snapshots(&mut self, mut snapshots: FxHashMap<Pos, ClientSnapshot>) {
+        snapshots.retain(|pos, _| self.live.contains_key(pos));
+        self.client_snapshots = snapshots;
+    }
     /// Whether the ticking table has been built.
     pub fn has_states(&self) -> bool {
         !self.states.is_empty()
@@ -408,7 +439,9 @@ impl BlockEntities {
         &mut self,
         pos: Pos,
     ) -> Option<&mut horizon_mod_runtime::attachments::Attachments> {
-        if !self.map.contains_key(&pos) && !self.out.contains_key(&pos) {
+        // Identity survives a temporary take and retires on removal or an
+        // abandoned-lease sweep, exactly like attachment ownership.
+        if !self.generations.contains_key(&pos) {
             return None;
         }
         let map = self.attachments.entry(pos).or_default();
@@ -440,6 +473,104 @@ impl BlockEntities {
                     &pos,
                 );
             }
+        }
+    }
+    /// Retires the map of the block entity leaving `pos`: at once, or, while a transaction
+    /// defers retirement, kept bound until it closes.
+    fn retire(&mut self, pos: Pos) {
+        if let Some(retiring) = &mut self.retiring {
+            if let (Some(map), Some(&generation)) =
+                (self.attachments.remove(&pos), self.generations.get(&pos))
+            {
+                retiring.push((pos, generation, map));
+            }
+            return;
+        }
+        retire_attachments(
+            &mut self.attachments,
+            self.attachment_observer.as_ref(),
+            &self.generations,
+            &pos,
+        );
+    }
+    /// From now until `publish_retirement`, a block entity that goes keeps its map bound to
+    /// its index entries: the root transaction opened, and only its commit publishes what it
+    /// removed.
+    pub fn defer_retirement(&mut self) {
+        self.retiring.get_or_insert_with(Vec::new);
+    }
+    /// Whether a transaction is open: between `defer_retirement` and `publish_retirement`.
+    pub fn defers_retirement(&self) -> bool {
+        self.retiring.is_some()
+    }
+    /// Retires every map kept since `defer_retirement`, and stops deferring: the root
+    /// transaction closed. What an abort did not put back goes: those of block entities a
+    /// committed transaction removed, and those of block entities an aborted one made.
+    pub fn publish_retirement(&mut self) {
+        for (pos, generation, map) in self.retiring.take().into_iter().flatten() {
+            if let Some(observer) = &self.attachment_observer {
+                observer.unload(BlockEntityIdentity {
+                    position: [pos.0, pos.1, pos.2],
+                    generation,
+                });
+            }
+            drop(map);
+        }
+    }
+    /// Gives the block entity of `generation` that stands at `pos` again the map it went with
+    /// in this transaction, as it was then, still bound: a removed block entity a later write
+    /// in the same transaction put back.
+    pub fn reattach_retired(&mut self, pos: Pos, generation: u64) {
+        if self.generation(&pos) != Some(generation) || self.attachments.contains_key(&pos) {
+            return;
+        }
+        let Some(retiring) = &mut self.retiring else {
+            return;
+        };
+        if let Some(at) = retiring
+            .iter()
+            .position(|(p, g, _)| *p == pos && *g == generation)
+        {
+            let (_, _, map) = retiring.swap_remove(at);
+            self.attachments.insert(pos, map);
+        }
+    }
+    /// Puts the attachment map of the block entity at `pos` back as a transaction kept it,
+    /// `data`, for the block entity of `generation` that stands there again: the very map it
+    /// had, still bound, where it went in this transaction, so its index entries never left.
+    pub fn put_back_attachments(
+        &mut self,
+        pos: Pos,
+        generation: Option<u64>,
+        data: Option<horizon_mod_runtime::attachments::Attachments>,
+    ) {
+        let kept = self.retiring.as_mut().and_then(|retiring| {
+            let at = retiring
+                .iter()
+                .position(|(p, g, _)| *p == pos && Some(*g) == generation)?;
+            Some(retiring.swap_remove(at).2)
+        });
+        match (kept, data) {
+            (Some(mut map), Some(data)) if self.generation(&pos) == generation => {
+                map.replace_contents(data);
+                if let Some(current) = self.attachments.insert(pos, map) {
+                    // A map the transaction made for the same block entity after it went:
+                    // never bound apart from this one, which holds the index entries.
+                    drop(current);
+                }
+            }
+            (Some(map), _) => {
+                if let (Some(observer), Some(generation)) = (&self.attachment_observer, generation)
+                {
+                    observer.unload(BlockEntityIdentity {
+                        position: [pos.0, pos.1, pos.2],
+                        generation,
+                    });
+                }
+                drop(map);
+                self.set_attachments(pos, None);
+            }
+            (None, data) => self.set_attachments(pos, data),
         }
     }
     /// Attachment maps in a loaded chunk, for a save snapshot.
@@ -507,6 +638,44 @@ impl BlockEntities {
     pub fn mods_in(&self, chunk: (i32, i32)) -> impl Iterator<Item = &Pos> {
         self.mods.get(&chunk).into_iter().flatten()
     }
+    /// `SignBlockEntity.playerWhoMayEdit` of the sign at `pos`.
+    pub fn sign_editor(&self, pos: &Pos) -> Option<u128> {
+        match self.map.get(pos) {
+            Some(BlockEntity::Sign(sign)) => sign.allowed_editor,
+            _ => None,
+        }
+    }
+    /// `SignBlockEntity.setAllowedPlayerEditor`: the one player whose editor
+    /// is on the sign at `pos`, or `None` for nobody's.
+    pub fn set_sign_editor(&mut self, pos: Pos, who: Option<u128>) {
+        let Some(BlockEntity::Sign(sign)) = self.map.get_mut(&pos) else {
+            return;
+        };
+        sign.allowed_editor = who;
+        if who.is_some() {
+            self.sign_editors.insert(pos);
+        } else {
+            self.sign_editors.remove(&pos);
+        }
+    }
+    /// The positions of the signs a player's editor is on, in no order.
+    pub fn sign_editors(&self) -> impl Iterator<Item = &Pos> {
+        self.sign_editors.iter()
+    }
+    /// Drops `pos` from the signs an editor is on, for a sign that is gone or
+    /// no longer holds one. `set_sign_editor` keeps the list itself.
+    pub fn forget_sign_editor(&mut self, pos: Pos) {
+        self.sign_editors.remove(&pos);
+    }
+    /// Keeps `pos` listed in `sign_editors` exactly while `entity` holds an
+    /// editor, as `note_box` does for the boxes.
+    fn note_sign_editor(&mut self, pos: Pos, entity: &BlockEntity) {
+        if matches!(entity, BlockEntity::Sign(sign) if sign.allowed_editor.is_some()) {
+            self.sign_editors.insert(pos);
+        } else {
+            self.sign_editors.remove(&pos);
+        }
+    }
     /// `LevelChunk.getBlockEntity`: the block entity at `pos`, if any.
     pub fn get(&self, pos: &Pos) -> Option<&BlockEntity> {
         self.map.get(pos)
@@ -562,16 +731,12 @@ impl BlockEntities {
         };
         let new_identity = replace_identity || !self.map.get(&pos).is_some_and(same_type);
         if new_identity {
-            retire_attachments(
-                &mut self.attachments,
-                self.attachment_observer.as_ref(),
-                &self.generations,
-                &pos,
-            );
+            self.retire(pos);
             self.new_generation(pos);
         }
         self.replace_taken(pos);
         let new_box = shows_box(&entity);
+        self.note_sign_editor(pos, &entity);
         self.asleep.remove(&pos);
         let old = self.map.insert(pos, entity);
         if self.on_load_enabled && new_identity && new_is_mod {
@@ -601,12 +766,7 @@ impl BlockEntities {
         let absent = !self.map.contains_key(&pos);
         if absent {
             self.replace_taken(pos);
-            retire_attachments(
-                &mut self.attachments,
-                self.attachment_observer.as_ref(),
-                &self.generations,
-                &pos,
-            );
+            self.retire(pos);
             self.new_generation(pos);
             forget_mod(&mut self.mods, pos);
             self.boxes.remove(&pos);
@@ -628,18 +788,14 @@ impl BlockEntities {
     /// `LevelChunk.removeBlockEntity`: the block entity and its slot.
     pub fn remove(&mut self, pos: &Pos) -> Option<BlockEntity> {
         self.out.remove(pos);
-        retire_attachments(
-            &mut self.attachments,
-            self.attachment_observer.as_ref(),
-            &self.generations,
-            pos,
-        );
+        self.retire(*pos);
         self.generations.remove(pos);
         self.asleep.remove(pos);
         self.cancel(pos);
         let removed = self.map.remove(pos);
         forget_mod(&mut self.mods, *pos);
         self.boxes.remove(pos);
+        self.sign_editors.remove(pos);
         removed
     }
     /// The block entity at `pos`, out of the map for a while: its slot stays
@@ -686,6 +842,7 @@ impl BlockEntities {
             self.mods.entry(chunk_of(pos)).or_default().insert(pos);
         }
         self.note_box(pos, Some(&entity));
+        self.note_sign_editor(pos, &entity);
         if self.map.insert(pos, entity).is_none()
             && !self.live.contains_key(&pos)
             && !self.pending.contains_key(&pos)
@@ -730,6 +887,7 @@ impl BlockEntities {
         let (mods, boxes) = (&mut self.mods, &mut self.boxes);
         let generations = &mut self.generations;
         let observer = self.attachment_observer.as_ref();
+        let sign_editors = &mut self.sign_editors;
         self.asleep.clear();
         self.map.retain(|p, e| {
             let kept = keep(p, e);
@@ -740,6 +898,7 @@ impl BlockEntities {
                 pending.remove(p);
                 forget_mod(mods, *p);
                 boxes.remove(p);
+                sign_editors.remove(p);
             }
             kept
         });
@@ -752,6 +911,7 @@ impl BlockEntities {
         self.map.clear();
         self.mods.clear();
         self.boxes.clear();
+        self.sign_editors.clear();
         self.asleep.clear();
         self.tickers = Arc::default();
         self.live.clear();
@@ -760,6 +920,7 @@ impl BlockEntities {
         self.out.clear();
         self.replaced.clear();
         self.carried.clear();
+        self.client_snapshots.clear();
         self.freed = false;
     }
     /// A loaded or generated chunk's block entities, in the order the chunk
@@ -781,6 +942,7 @@ impl BlockEntities {
             self.asleep.remove(&p);
             let new_is_mod = matches!(e, BlockEntity::Mod(_));
             self.note_box(p, Some(&e));
+            self.note_sign_editor(p, &e);
             let old = self.map.insert(p, e);
             if old.is_some() {
                 self.replaced.insert(p);

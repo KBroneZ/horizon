@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Function replacement end to end (fn-replace): two native mods' `[[native.mixin]]` rows built by the
+# Function replacement end to end (fn-replace): native mods' `[[native.mixin]]` rows (and API-only mods) built by the
 # launcher's normal native build against a PREBUILT game, with no game rebuild, then run on a
 # dedicated server.
-#   [FNR_MODS="alpha beta"] [FNR_MOD_ROOT=DIR] tools/ci/fn_replace_check.sh LAUNCHER SDK SCRATCH [RESOURCES]
+#   [FNR_MODS="alpha beta"] [FNR_MOD_ROOT=DIR] [FNR_ROUTE=prebuilt|prebuilt-api] tools/ci/fn_replace_check.sh LAUNCHER SDK SCRATCH [RESOURCES]
 # FNR_WASM_LAYOUT_PACKAGE=valid.hmod FNR_WASM_STD=std.wasm adds a wasm point-layout refusal check
 # to the with-RESOURCES server run (not the build/link-only CI mode):
 # its exported layout fingerprint is changed to zero, and its integrity hash is updated.
@@ -20,10 +20,15 @@ case "$side" in server|client) ;; *) echo "FNR_SIDE must be server or client" >&
 root=$(git rev-parse --show-toplevel)
 # The game revision is the SDK's: its source is what a patched function is copied out of.
 revision=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['commit'])" "$2/horizon-prebuilt.json")
-mixins=$(sed -n 's/^pub const MIXINS_REV: &str = "\(.*\)";$/\1/p' "$root/crates/horizon-mod-package/src/index/native.rs")
-archive=$(sed -n 's/^pub const PREBUILT_ARCHIVE: &str = "\(.*\)";$/\1/p' "$root/crates/horizon-mod-package/src/index/native.rs")
+mixins=$(sed -n 's/^pub const REV: &str = "\(.*\)";$/\1/p' "$root/crates/horizon-mod-package/src/mixins_tool.rs")
+# The launcher's cache folder name: the package layout is numbered in one place.
+format=$(tr -d '[:space:]' < "$root/crates/horizon-mod-package/src/sdk/package-format")
+case $format in ''|*[!0-9]*) echo "crates/horizon-mod-package/src/sdk/package-format must hold one number, not '$format'" >&2; exit 2;; esac
+archive=horizon-prebuilt-v$format-
 
 # FNR_KEEP=1 keeps the launcher's folder (toolchain, horizon-mixins, source): a warm build.
+# FNR_MIXINS_FROM_SOURCE=1 builds horizon-mixins from its pinned source, dropping a kept tool: the
+# launcher otherwise downloads the prebuilt one, and its source build has to stay proven.
 if [ -n "${FNR_KEEP:-}" ]; then rm -rf "$scratch/mods" "$scratch/engine" "$scratch/run" "$scratch/launcher/native/server-builds" "$scratch/launcher/versions"/native-*; else rm -rf "$scratch"; fi
 mkdir -p "$scratch"/{home,launcher,data,config,trash,clipboard,desktop,mods}
 scratch=$(realpath "$scratch")
@@ -42,7 +47,24 @@ host=$(rustc -vV | sed -n 's/^host: //p')
 mkdir -p "$data/native/prebuilt"
 sdk_suffix=
 if [ "$side" = server ]; then sdk_suffix=-server; fi
-cp -a "$sdk" "$data/native/prebuilt/$revision-$archive$host$sdk_suffix"
+# Laid out as the launcher unpacks one: the identity's `runtime` and `api` slices in folders of
+# their own, every other file in `engine`, hard-linked where it can.
+python3 - "$sdk" "$data/native/prebuilt/$revision-$archive$host$sdk_suffix" <<'LAYOUT'
+import json, os, shutil, sys
+from pathlib import Path
+sdk, build = Path(sys.argv[1]), Path(sys.argv[2])
+slices = json.loads((sdk / "horizon-prebuilt.json").read_text())["slices"]
+placed = {name: kind for kind in ("runtime", "api") for name in slices[kind]}
+for path in sdk.rglob("*"):
+    if path.is_file():
+        name = path.relative_to(sdk).as_posix()
+        to = build / placed.get(name, "engine") / name
+        to.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.link(path, to)
+        except OSError:
+            shutil.copy2(path, to)
+LAYOUT
 
 base=$data/versions/ci
 mkdir -p "$base/.local/horizon-client/26.3"
@@ -70,10 +92,14 @@ game_hash=$(sha256sum "$(game_library)" | cut -d' ' -f1)
 env_vars=(HORIZON_HOME="$scratch/home" HORIZON_LAUNCHER_HOME="$data" XDG_DATA_HOME="$scratch/data"
   XDG_CONFIG_HOME="$scratch/config" HORIZON_LAUNCHER_NO_SELF_UPDATE=1 HORIZON_NO_AUDIO=1
   HORIZON_LAUNCHER_TRASH="$scratch/trash" HORIZON_LAUNCHER_CLIPBOARD="$scratch/clipboard"
-  HORIZON_LAUNCHER_DESKTOP="$scratch/desktop")
+  HORIZON_LAUNCHER_DESKTOP="$scratch/desktop" HORIZON_NATIVE_CARGO_TIMINGS=1)
 started=$(date +%s.%N)
 output_args=()
-if [ "$side" = server ]; then output_args=(--server-output "$scratch/engine"); fi
+if [ -n "${FNR_MIXINS_FROM_SOURCE:-}" ]; then
+  rm -rf "$data/native/tools"
+  output_args+=(--mixins-from-source)
+fi
+if [ "$side" = server ]; then output_args+=(--server-output "$scratch/engine"); fi
 env "${env_vars[@]}" "$launcher" native-build "$mods" "${output_args[@]}" --version native-ci --profile optimized \
   --trust-native-code > "$scratch/native-build.out" 2> "$scratch/native-build.err" || built=$?
 cat "$scratch/native-build.out"
@@ -89,15 +115,56 @@ if [ "$side" = client ]; then
 fi
 echo "native build: $(python3 -c "print(round($(date +%s.%N) - $started, 1))") s"
 test -x "$scratch/engine/horizon-engine" || test -x "$scratch/engine/horizon-engine.exe"
+python3 - "$scratch/engine" <<'PYMARK'
+import pathlib, sys
+engine = pathlib.Path(sys.argv[1])
+binary = next(p for p in (engine / "horizon-engine", engine / "horizon-engine.exe") if p.is_file())
+assert b"horizon-private-holder-v2;" in binary.read_bytes(), f"holder capability missing from {binary}"
+PYMARK
 if [ "$side" = server ]; then
   # The server folder's export: the launcher says where the engine is, and installs no instance build.
   grep -F "Built the server engine: $scratch/engine/horizon-engine" "$scratch/native-build.out"
   test -z "$(find "$data/versions" -type f -name 'horizon-client*' ! -path "$version/*")"
 fi
 log=$data/native/build.log
-grep -F 'Function replacement:' "$log"
-# The prebuilt route, and no game source compiled.
-grep -F '"route": "prebuilt"' "$data"/versions/*/native-mods.json > /dev/null || grep -rF 'prebuilt' "$log" > /dev/null
+# Where the build's time went: each command's time and the whole prebuilt compile.
+grep -E ': [0-9]+ ms$|^Mods compiled against the prebuilt game in ' "$log" || true
+echo "Runner load: $(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null) on $(nproc 2>/dev/null) CPUs"
+# What the kept build folders weigh on the Storage page's Build files row.
+for kept in "$data"/native/prebuilt-build/*-*/; do
+  [ -d "$kept" ] && echo "Kept build folder $(basename "$kept"): $(du -sk "$kept" | cut -f1) kB"
+done
+# The registry route's one cargo command, split by crate (cargo's own timings), longest first.
+timings=$(find "$data/native" -path '*cargo-timings/cargo-timing.html' 2>/dev/null | head -1)
+if [ -n "$timings" ]; then
+  python3 - "$timings" <<'PY'
+import json, re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+match = re.search(r"UNIT_DATA = (\[.*?\]);", text, re.S)
+units = json.loads(match.group(1)) if match else []
+for unit in sorted(units, key=lambda u: -u.get("duration", 0)):
+    label = f"{unit['name']}{unit.get('target', '')}".replace('"', "")
+    print(f"cargo unit {label}: {round(unit.get('duration', 0) * 1000)} ms")
+PY
+fi
+# Only a `[[native.*]]` row patches a function; a mod of hooks alone must not say it did.
+if grep -qs '^\[\[native\.' "$mods"/*/horizon-mod.toml; then
+  grep -F 'Function replacement:' "$log"
+elif grep -sF 'Function replacement:' "$log"; then
+  echo "a set with no [[native.*]] row logged a function replacement"; exit 1
+fi
+# The prebuilt route, and no game source compiled. FNR_ROUTE names the route the whole set must
+# take: `prebuilt-api` (every mod API-only) or `prebuilt` (a mod with a `[native]` table row).
+grep -F '"route": "prebuilt' "$data"/versions/*/native-mods.json > /dev/null || grep -rF 'prebuilt' "$log" > /dev/null
+if [ -n "${FNR_ROUTE:-}" ]; then grep -F "Native mods route: $FNR_ROUTE." "$log"; fi
+# The API route plays the package's own executable: it carries the holder marker in its own bytes.
+if [ "${FNR_ROUTE:-}" = prebuilt-api ]; then
+  marker=$(sed -n 's/^pub static CAPABILITY: \[u8; [0-9]*\] = \*b"\([^"]*\)";$/\1/p' "$root/crates/horizon-mod-package/src/holder.rs")
+  test -n "$marker"
+  played=$(ls "$scratch/engine/horizon-engine" "$scratch/engine/horizon-engine.exe" 2>/dev/null | head -1)
+  grep -qaF "$marker" "$played" || { echo "$played does not carry the holder marker $marker"; exit 1; }
+  echo "holder marker $marker found in $played"
+fi
 test ! -d "$data/native/stage/crates/horizon-client" || { echo "the game was staged for a source build"; exit 1; }
 test "$(sha256sum "$(game_library)" | cut -d' ' -f1)" = "$game_hash"
 
@@ -111,11 +178,18 @@ if [ -n "$resources" ]; then
     layout_mod=$(python3 "$root/tools/ci/mismatch_wasm_layout.py" "$FNR_WASM_LAYOUT_PACKAGE" "$run/horizon-mods/layout-refused.hmod")
     printf 'mod.%s:true\n' "$layout_mod" > "$run/horizon-mods.txt"
   fi
-  # A loop mod gets a forced chunk of hoppers handing stone along each row, so the loop visits them.
+  # A loop mod gets a forced chunk of hoppers handing stone along each row, so the loop visits them,
+  # and a row of each loop mod's counters beside them.
   hoppers=
   if [[ " ${FNR_MODS:-alpha beta} " == *" loop"* ]]; then
     hoppers='forceload add 0 0
 fill 0 100 0 9 100 9 minecraft:hopper[facing=east]{Items:[{Slot:0b,id:"minecraft:stone",count:64}]}'
+  fi
+  if [[ " ${FNR_MODS:-alpha beta} " == *" loop "* ]]; then
+    hoppers+=$'\nfill 0 100 11 9 100 11 fnr_loop:counter'
+  fi
+  if [[ " ${FNR_MODS:-alpha beta} " == *" loop_second "* ]]; then
+    hoppers+=$'\nfill 0 100 12 9 100 12 fnr_loop_second:counter'
   fi
   (sleep 30; echo "$hoppers"; sleep 5; echo "tick rate 40"; sleep 3; echo "tick rate 13"; sleep 3; echo "tick query"; sleep 3; echo "stop"; sleep 20) |
     (cd "$run" && env "${env_vars[@]}" timeout 180 "$scratch/engine/horizon-engine" --resources "$(realpath "$resources")" \
@@ -128,16 +202,28 @@ fill 0 100 0 9 100 9 minecraft:hopper[facing=east]{Items:[{Slot:0b,id:"minecraft
     grep -F 'OVERWRITE by fnr_alpha' "$scratch/server.log"
   fi
   if [[ " ${FNR_MODS:-alpha beta} " == *" loop "* ]]; then
-    # Both slots ran in priority order, the throttle wrote cooldowns, and the entry's HEAD composed.
+    slots=2
+    if [[ " ${FNR_MODS:-alpha beta} " == *" loop_second "* ]]; then
+      slots=3
+      # Two mods' block entities in one world: the second mod's slot counted its own too.
+      grep -F 'fnr: loop_second own #1: fnr_loop_second:counter' "$scratch/server.log"
+    fi
+    # Each slot checks every block entity it took for its own, and never took another mod's.
+    if grep -F 'own FOREIGN at' "$scratch/server.log"; then
+      echo "a loop slot took another mod's block entity for its own"; exit 1
+    fi
+    # Both slots ran in priority order, the count picked out its mod's counters, the throttle wrote
+    # cooldowns, and the entry's HEAD composed.
     grep -F 'fnr: loop count before #1:' "$scratch/server.log"
     grep -F 'fnr: loop count after #1:' "$scratch/server.log"
+    grep -F 'fnr: loop count own #1: fnr_loop:counter' "$scratch/server.log"
     grep -F 'fnr: loop throttle skips #1:' "$scratch/server.log"
     grep -F 'fnr: loop HEAD tick_block_entities' "$scratch/server.log"
     # A call-site row inside the loop body ran in the loop's copy, and an API listener at the entry
     # fired through the same cell as the loop.
     grep -F 'fnr: loop MODIFY_EXPRESSION_VALUE chunk check inside the loop' "$scratch/server.log"
     grep -F 'fnr: loop api head listener at tick_block_entities' "$scratch/server.log"
-    grep -F 'Published loops: 1 filled by 2 mod slots' "$log"
+    grep -F "Published loops: 1 filled by $slots mod slots" "$log"
     # The slot ran the loop again from inside it: the nested run was the game's own, logged once.
     grep -F 'fnr: loop count ran the loop again inside it: true' "$scratch/server.log"
     test "$(grep -cF 'Published loop block_entities.tick: it was entered again while it ran' "$scratch/server.log")" = 1
@@ -146,6 +232,10 @@ fill 0 100 0 9 100 9 minecraft:hopper[facing=east]{Items:[{Slot:0b,id:"minecraft
     # The slot's panic is the server's crash, and its report names the mod and the loop.
     grep -F 'in native mod fnr_loop_panic, hook loop block_entities.tick, part fnr_loop_panic::Tenth' "$run"/crash-reports/*.txt
     grep -F 'Saving chunks for level' "$scratch/server.log"
+  fi
+  if [[ " ${FNR_MODS:-alpha beta} " == *" api_only "* ]]; then
+    grep -F 'fnr: api_only server_started, sin 0.479' "$scratch/server.log"
+    grep -F 'fnr: api_only listener at tick_block_entities' "$scratch/server.log"
   fi
   if [[ " ${FNR_MODS:-alpha beta} " == *" fdshape "* ]]; then
     grep -F 'fnr: native_server_started dedicated=true' "$scratch/server.log"

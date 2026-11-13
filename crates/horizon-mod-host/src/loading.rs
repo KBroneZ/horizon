@@ -5,11 +5,29 @@ use mod_api::__private::game::Fields;
 pub fn main_with(
     mods: Vec<mod_api::ModEntry>,
     slots: &[crate::SlotListener],
-    built: &'static [horizon_mod_package::runtime::BuiltMod],
+    built: &'static [mod_api::__private::native::BuiltMod],
     startup: horizon_client::entry::Startup,
 ) {
     horizon_engine_slots::install_seal(mod_points::__private::seal)
         .expect("engine seal provider must be installed once before startup");
+    // Platform instrumentation must precede registration and the first mod guard.
+    if let Err(error) = mod_api::__private::initialize() {
+        eprintln!("Horizon: refusing startup because mod instrumentation is unavailable: {error}");
+        std::process::exit(1);
+    }
+    if let Err(error) = horizon_engine_slots::install_platform(horizon_engine_slots::Platform {
+        install_packages: mod_api::__private::install_packages,
+        install_registration_data: mod_api::__private::install_registration_data,
+        install_parts: mod_api::__private::install_parts,
+        profiler_is_enabled: mod_api::__private::profiler::is_enabled,
+        profiler_start: mod_api::__private::profiler::start,
+        profiler_stop: mod_api::__private::profiler::stop,
+        profiler_summary: mod_api::__private::profiler::summary,
+        profiler_firefox_profile: mod_api::__private::profiler::firefox_profile,
+    }) {
+        eprintln!("Horizon: {error}");
+        std::process::exit(1);
+    }
     let exe = std::env::current_exe();
     let native: Result<_, Box<dyn std::error::Error + Send + Sync>> = exe
         .as_ref()
@@ -24,13 +42,12 @@ pub fn main_with(
             std::process::exit(1);
         }
     };
+    mod_render::render::install();
     horizon_client::entry::start(
         native,
         |native, launch| {
-            let mut wasm = horizon_mod_wasm::load_installed(
-                &launch.context.game_dir,
-                &launch.context.dev_mods,
-            );
+            let mut wasm =
+                horizon_mod_wasm::load_installed(launch, &horizon_client::logging::player_dir());
             let mut mods = mods;
             mods.extend(std::mem::take(&mut wasm.mods));
             // One installed dispatch order for both targets; ties retain bundle order.
@@ -97,7 +114,48 @@ pub fn main_with(
         },
         horizon_client::entry::CodeRuntime {
             initialize: horizon_mod_wasm::initialize,
-            refusal: |id| horizon_mod_wasm::refusal(id).map(|reason| reason.to_string()),
+            refusal: |id| {
+                horizon_mod_wasm::refusal(id).map(|reason| {
+                use horizon_client::text::Text;
+                match reason {
+                    horizon_mod_wasm::Refusal::CompileTimeout { member, budget } => {
+                        let source = match budget.threads {
+                            Some(threads) => Text::translate_with_fallback("horizon.wasm.compile_default", "default for %s threads", &[Text::literal(threads.to_string())]),
+                            None => Text::translate_with_fallback("horizon.wasm.compile_setting", "setting %s", &[Text::literal(horizon_mod_wasm::compile_budget::SETTING)]),
+                        };
+                        Text::translate_with_fallback("horizon.wasm.compile_timeout", "%s: compilation exceeded %s seconds (%s). Increase %s to allow more compile time.", &[
+                            Text::literal(member),
+                            Text::literal(budget.limit.as_secs_f64().to_string()),
+                            source,
+                            Text::literal(horizon_mod_wasm::compile_budget::SETTING),
+                        ]).plain()
+                    }
+                    horizon_mod_wasm::Refusal::CompileSetting(error) => {
+                        use horizon_mod_wasm::compile_budget::{SETTING, SettingError};
+                        match error {
+                            SettingError::InvalidValue(value) => Text::translate_with_fallback(
+                                "horizon.wasm.compile_setting_invalid",
+                                "Invalid %s=%s: expected positive finite seconds.",
+                                &[Text::literal(SETTING), Text::literal(format!("{value:?}"))],
+                            ).plain(),
+                            SettingError::File { path, why } => Text::translate_with_fallback(
+                                "horizon.wasm.compile_setting_file",
+                                "Cannot read %s from %s: %s",
+                                &[Text::literal(SETTING), Text::literal(path.display().to_string()), Text::literal(why)],
+                            ).plain(),
+                        }
+                    }
+                    horizon_mod_wasm::Refusal::CompileUnavailable { member, budget, why } => {
+                        Text::translate_with_fallback(
+                            "horizon.wasm.compile_unavailable",
+                            "%s: cannot enforce the %s second compilation budget: %s. Restore a private writable .horizon-cache/wasm directory and a working compiler executable.",
+                            &[Text::literal(member), Text::literal(budget.limit.as_secs_f64().to_string()), Text::literal(why)],
+                        ).plain()
+                    }
+                    other => other.to_string(),
+                }
+            })
+            },
             startup_refused: |id| {
                 horizon_mod_wasm::refused()
                     .iter()
