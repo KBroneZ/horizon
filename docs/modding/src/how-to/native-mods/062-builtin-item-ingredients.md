@@ -54,10 +54,15 @@ Native registrations retain their persistent NBT validation contract.
 
 The shared decoder currently covers `damage`, `repair_cost`, `max_damage`,
 `max_stack_size`, `rarity`, `enchantments`, `stored_enchantments`, `custom_name`,
-`item_name`, `block_entity_data`, and `fox/variant` in the `minecraft` namespace.
+`item_name`, `block_entity_data`, `fox/variant`, and `mooshroom/variant` in the
+`minecraft` namespace.
 The `fox/variant` persistent codec accepts only the exact strings `"red"` and
 `"snow"`; numeric network ids, case variants and namespaced values are rejected.
-The other 111 registered built-ins use stored-value matching while their shared
+The `mooshroom/variant` persistent codec accepts only `"red"` and `"brown"`,
+not numeric ids, case variants or namespaced values. Vanilla mooshroom spawn
+eggs have no variant component by default; the mob's red default is not an item
+component default.
+The other 110 registered built-ins use stored-value matching while their shared
 decoders are added incrementally in **#3875**. Their absence is not a load refusal.
 
 Component ingredient displays contain the patch, including removals. Difference
