@@ -9,6 +9,7 @@ mod advancements;
 pub mod arrivals;
 pub mod attributes;
 mod biome_resend;
+mod body;
 pub mod border;
 pub mod chunk_sync;
 pub mod chunks;
@@ -20,6 +21,7 @@ pub mod conn;
 pub mod containers;
 pub mod data;
 pub mod discovery;
+mod effect_meta;
 pub mod entity;
 pub mod equipment_cache;
 pub mod far;
@@ -41,6 +43,7 @@ pub mod tracking;
 pub mod watch;
 pub mod waypoints;
 
+pub use body::Body;
 pub use conn::{Holding, PlayerSender, flush_all};
 use horizon_protocol::packets::play;
 use horizon_protocol::{
