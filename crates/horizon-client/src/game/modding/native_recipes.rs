@@ -722,7 +722,7 @@ mod tests {
     /// numbered `n` and `n + 1`, so a viewer's "+" sent the neighbour's id. A
     /// vanilla recipe has exactly one book id, the server's, synced or not.
     #[test]
-    #[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+    #[ignore = "daily"]
     fn a_synced_vanilla_recipe_has_one_book_id_the_servers() {
         use std::path::{Path, PathBuf};
         fn book_ids(game: &mut crate::game::Game<'_>, id: &str) -> Vec<i32> {
