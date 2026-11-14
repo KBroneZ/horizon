@@ -6,6 +6,11 @@ horizon-client game::api_values::read_stack_tests::read_consumers_forward_nonres
 horizon-client game::commands::modprofile::tests::modprofile_state_and_report_side_effects lib daily child-process
 horizon-client game::commands::selector_bounds_tests::actual_selector_uses_body_overlap_but_distance_stays_at_the_origin lib daily game-boot
 horizon-client game::commands::world_cmds::allay_owner_damage_tests::allay_owner_adapters_compare_the_actual_player_uuid lib daily game-boot
+horizon-client game::container_loot::tests::commands_clone_and_structures lib daily child-process
+horizon-client game::container_loot::tests::player_and_world_triggers lib daily child-process
+horizon-client game::container_loot::tests::random_selection_streams lib daily resources
+horizon-client game::container_loot::tests::seeds_and_fill_listeners lib daily child-process
+horizon-client game::container_loot::tests::transfers_between_containers lib daily child-process
 horizon-client game::dedicated::tests::console_logging_survives_closed_stdout lib daily child-process
 horizon-client game::entity_sections::tests::a_real_mob_tick_tells_inside_each_position_write lib daily resources
 horizon-client game::explosion_detonate::tests::a_nested_blast_keeps_its_own_spared lib daily game-boot
@@ -58,8 +63,3 @@ horizon-client game::tnt::tests::silent_potions_keep_the_splash_without_its_soun
 horizon-client game::tnt::tests::silent_tnt_keeps_the_blast_without_its_sound lib daily game-boot
 horizon-client game::tnt::tests::tnt_primed_by_a_blast_waits_for_the_next_tick lib daily game-boot
 horizon-client game::wither_star_tests::a_withers_nether_star_lives_12000_ticks lib daily game-boot
-horizon-client game::world::container_loot::tests::commands_clone_and_structures lib daily child-process
-horizon-client game::world::container_loot::tests::player_and_world_triggers lib daily child-process
-horizon-client game::world::container_loot::tests::random_selection_streams lib daily resources
-horizon-client game::world::container_loot::tests::seeds_and_fill_listeners lib daily child-process
-horizon-client game::world::container_loot::tests::transfers_between_containers lib daily child-process
