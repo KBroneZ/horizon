@@ -740,7 +740,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "needs prepared resources; isolated menu registration"]
+    #[ignore = "daily"]
     fn a_mod_menu_opened_in_place_sends_no_close_and_still_closes_the_old_menu() {
         use mod_api::{PlayerContainerCloseEvent, PlayerContainerOpenEvent};
         use std::sync::Mutex;
