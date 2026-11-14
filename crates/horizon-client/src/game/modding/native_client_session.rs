@@ -258,13 +258,17 @@ pub(super) mod tests {
     }
 
     #[test]
-    #[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+    #[ignore = "daily"]
     fn latency_and_item_use_read_the_local_player_as_the_client_sees_it() {
         with_client_game(|game| {
             assert_eq!(game.client_session().client_latency(), None);
             assert_eq!(game.local_item_use(), None);
             let _server = logged_client(game);
-            assert_eq!(game.client_session().client_latency(), None, "not listed yet");
+            assert_eq!(
+                game.client_session().client_latency(),
+                None,
+                "not listed yet"
+            );
             game.remote.as_mut().unwrap().list_self(0);
             assert_eq!(game.client_session().client_latency(), Some(0));
             game.remote.as_mut().unwrap().list_self(87);
@@ -278,7 +282,10 @@ pub(super) mod tests {
                 Some(mod_api::ItemUse::new(mod_api::Hand::Main, 7, 71_993))
             );
             game.using = Some((super::super::shield::OFFHAND_SLOT, 3));
-            assert_eq!(game.local_item_use().map(|u| u.hand), Some(mod_api::Hand::Off));
+            assert_eq!(
+                game.local_item_use().map(|u| u.hand),
+                Some(mod_api::Hand::Off)
+            );
             game.using = None;
             assert_eq!(game.local_item_use(), None, "released");
 
