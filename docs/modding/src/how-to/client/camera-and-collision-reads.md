@@ -31,6 +31,16 @@ reversed depth z. A HUD or screen hook turns it into GUI pixels with the `DrawCo
 non-finite one (vanilla returns a mirrored point there), outside a world, before extraction and between render frames. It is supported in GUI, screen
 and world drawing callbacks after camera extraction, not setup or tick callbacks.
 
+`ClientHost::set_local_rotation(yaw, pitch)` turns the local player's view, as vanilla's `setYRot`
+and `setXRot` store it: yaw as given (not wrapped; the server wraps it), pitch `% 360` then clamped to
+-90..90. The previous-frame angles move by the same amount, so the view doesn't jump. The call sends no
+packet. The game's own player sync at the end of the client tick sends the look in its one move packet,
+of the kind vanilla picks, and only while the camera is the player (a rider sends the rotation-only
+packet). Several calls in one tick send the last values once, and a call after the sync goes out the
+next tick. NaN or infinity returns `NotFinite` and changes nothing; outside a world the call returns
+`NoWorld`. The server sees an ordinary client look, at tick granularity, as from a mouse.
+`calculate_player_turn` changes how far the mouse turns the view; `set_local_rotation` sets it directly.
+
 `ClientHost::set_camera_type(type)` is a queued client-only effect and takes `&self`, so
 shared callbacks such as `camera_pose` can request a perspective. `camera_type()` reports
 the latest request immediately; several requests coalesce to the last one. Requests before
