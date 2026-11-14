@@ -1,8 +1,8 @@
-//! Mods disconnecting a player (server) or leaving the world (client), NeoForge's
-//! `ICommonPacketListener.disconnect` and `IClientCommonPacketListenerExtension.disconnect`.
+//! A client mod leaving the world, NeoForge's `IClientCommonPacketListenerExtension.disconnect`.
+//! The server half is `native_player_disconnect`.
 use super::Game;
-use horizon_client::{Result, lan::data::component_nbt, text::Text};
-use mod_api::{DisconnectError, PlayerRef, WorldEpoch};
+use horizon_client::{Result, text::Text};
+use mod_api::{DisconnectError, WorldEpoch};
 
 /// A client mod's request to leave, carried out at the end of the frame.
 pub(super) struct LeaveRequest {
@@ -12,32 +12,6 @@ pub(super) struct LeaveRequest {
 }
 
 impl Game<'_> {
-    /// Kicks a connected player with `reason` through the hub's own kick (`Hub::kick`, as bans
-    /// and `/kick` do): the disconnect packet goes out and the kick is recorded now, and the
-    /// hub's next poll fires `player_kicked` and removes the player. Once a kick is under way,
-    /// a further call changes nothing.
-    pub(super) fn player_disconnect(&mut self, player: PlayerRef, reason: Text) -> bool {
-        let acting = self.native_acting_player() == Some(player) && !self.lan_acting_fake;
-        if !acting && self.online_player_record(player).is_none() {
-            return false;
-        }
-        let uuid = player.uuid();
-        let Some(lan) = self.lan.as_ref() else {
-            return false;
-        };
-        // KickCommand: an integrated server can't kick its own host.
-        if lan.hub.singleplayer_owner == Some(uuid) {
-            return false;
-        }
-        let Some(guest) = lan.hub.online_players().find(|g| g.uuid == uuid) else {
-            return false;
-        };
-        if !guest.kicked {
-            self.kick_uuid(uuid, component_nbt(&reason.component()));
-        }
-        true
-    }
-
     /// Asks to leave the joined server or world at the end of this frame.
     /// Unavailable with no world joined, or while the world is already closing.
     pub(super) fn disconnect(
