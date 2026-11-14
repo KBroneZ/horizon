@@ -787,7 +787,6 @@ mod tests {
             game.lan.as_mut().unwrap().play.entry(1).or_default();
             let player = game.player(123).unwrap();
             assert_eq!(open(game, 3, "old", MenuReplace::CloseFirst), 1);
-            game.tick_player_menus();
             assert_eq!(heard(), ["open minecraft:generic_9x3"]);
             sent(&rx);
             let stone = ItemStack::new("minecraft:stone", 4);
@@ -804,7 +803,13 @@ mod tests {
                 .unwrap();
             assert_eq!(window, 2);
             // The old menu's close, heard once, before anything of the new one.
-            assert_eq!(heard(), ["close minecraft:generic_9x3"]);
+            assert_eq!(
+                heard(),
+                [
+                    "close minecraft:generic_9x3".to_owned(),
+                    format!("open {MOD_MENU}")
+                ]
+            );
             let packets: Vec<String> = sent(&rx)
                 .iter()
                 .map(|p| match p {
@@ -849,9 +854,8 @@ mod tests {
                 "the old menu closed on the server"
             );
 
-            // The next tick tells of the new menu, and of no second close.
-            game.tick_player_menus();
-            assert_eq!(heard(), [format!("open {MOD_MENU}")]);
+            // Both notifications were delivered inline, without a second close.
+            assert!(heard().is_empty());
         });
     }
 
