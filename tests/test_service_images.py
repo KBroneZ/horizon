@@ -52,6 +52,22 @@ def generator_files() -> set[str]:
     return {name for name in named if (ROOT / name).is_file()}
 
 
+def included_files(crates: set[str]) -> set[str]:
+    """The repository files outside crates/ that the crates' own code includes at compile time
+    (`include_str!`/`include_bytes!` before the first `#[cfg(test)]`, and not from a test file) and that exist."""
+    found = set()
+    for name in crates:
+        for source in (ROOT / "crates" / name / "src").rglob("*.rs"):
+            if "test" in source.name:
+                continue
+            text = source.read_text(encoding="utf-8").split("#[cfg(test)]")[0]
+            for relative in re.findall(r'include_(?:str|bytes)![(]"([^"]+)"[)]', text):
+                target = (source.parent / relative).resolve()
+                if target.is_file() and target.is_relative_to(ROOT) and not target.is_relative_to(ROOT / "crates"):
+                    found.add(target.relative_to(ROOT).as_posix())
+    return found
+
+
 def copies_every_crate(dockerfile: Path) -> bool:
     return re.search(r"^COPY crates crates\s*$", dockerfile.read_text(), re.MULTILINE) is not None
 
@@ -106,12 +122,14 @@ class ServiceImageTests(unittest.TestCase):
 
     def test_an_image_that_runs_the_generator_copies_and_watches_its_data_files(self):
         # The build script fails when a file the generator reads outside crates/ is missing from the image.
-        files = generator_files()
-        self.assertIn("tools/layering/mod_vocab_state.json", files)
+        self.assertIn("tools/layering/mod_vocab_state.json", generator_files())
+        self.assertIn("tools/mixins/narrow-reference-rule.patch", included_files({"horizon-mod-package"}))
         for service in SERVICES:
             crate = ROOT / "crates" / service
-            if VOCAB not in path_packages(crate / "Cargo.lock"):
+            lock = path_packages(crate / "Cargo.lock")
+            if VOCAB not in lock:
                 continue
+            files = generator_files() | included_files(lock)
             with self.subTest(service=service):
                 copied = set(re.findall(r"^COPY (tools/\S+) \1\s*$", (crate / "Dockerfile").read_text(), re.MULTILINE))
                 self.assertEqual(sorted(files - copied), [], f"{service}/Dockerfile must COPY these files")

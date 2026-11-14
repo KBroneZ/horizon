@@ -8,8 +8,10 @@ COPY Cargo.toml Cargo.toml
 # crates/horizon-client/src/game and the crate each hook target names). tests/test_service_images.py checks this.
 # .dockerignore leaves out build folders.
 COPY crates crates
-# The data files the generator reads outside crates/ (tests/test_service_images.py derives the list from its source).
+# The files outside crates/ that the build reads: the generator's data and what a crate includes (tests/test_service_images.py
+# derives the list from their sources).
 COPY tools/layering/mod_vocab_state.json tools/layering/mod_vocab_state.json
+COPY tools/mixins/narrow-reference-rule.patch tools/mixins/narrow-reference-rule.patch
 RUN cargo build --release --locked --manifest-path crates/horizon-mod-registry/Cargo.toml
 
 FROM debian:stable-slim

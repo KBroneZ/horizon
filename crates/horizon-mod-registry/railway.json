@@ -6,6 +6,7 @@
     "watchPatterns": [
       "/crates/**",
       "/tools/layering/mod_vocab_state.json",
+      "/tools/mixins/narrow-reference-rule.patch",
       "/Cargo.toml",
       "/.dockerignore"
     ]

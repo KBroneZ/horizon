@@ -7,20 +7,22 @@ on:
     branches: [main]
     paths:
       # Everything its image copies (crates/horizon-mod-registry/Dockerfile): every crate's sources and the
-      # layering inventory, which horizon-mod-vocab's build script reads, the root manifest and the build
-      # context's ignore list.
+      # layering inventory and the mixin patch its build reads, the root manifest and the build context's
+      # ignore list.
       - 'crates/**'
       - 'tools/layering/mod_vocab_state.json'
+      - 'tools/mixins/narrow-reference-rule.patch'
       - 'Cargo.toml'
       - '.dockerignore'
       - '.github/workflows/mod-registry.yml'
   pull_request:
     paths:
       # Everything its image copies (crates/horizon-mod-registry/Dockerfile): every crate's sources and the
-      # layering inventory, which horizon-mod-vocab's build script reads, the root manifest and the build
-      # context's ignore list.
+      # layering inventory and the mixin patch its build reads, the root manifest and the build context's
+      # ignore list.
       - 'crates/**'
       - 'tools/layering/mod_vocab_state.json'
+      - 'tools/mixins/narrow-reference-rule.patch'
       - 'Cargo.toml'
       - '.dockerignore'
       - '.github/workflows/mod-registry.yml'
