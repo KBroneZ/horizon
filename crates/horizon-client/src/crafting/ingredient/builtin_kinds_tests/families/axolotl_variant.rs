@@ -182,7 +182,6 @@ fn axolotl_variant_recipe_defaults_removal_and_strictness_preserve_presence() {
     assert!(loose.craft(&context, &[Some(egg.clone())], 1).is_some());
     assert!(exact.craft(&context, &[Some(egg.clone())], 1).is_none());
     egg.data_mut().set_other("minecraft:custom_data", None);
-    egg.data_mut().set_other("minecraft:custom_data", None);
     for (value, matches_default) in [("lucy", true), ("wild", false)] {
         egg.data_mut().set_loot_component(
             "minecraft:axolotl/variant",
