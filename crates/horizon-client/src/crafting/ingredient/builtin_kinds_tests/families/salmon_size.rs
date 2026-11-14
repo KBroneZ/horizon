@@ -87,6 +87,11 @@ fn salmon_size_recipe_codec_matches_exact_names_without_candidate_allocations() 
             assert_eq!(allocations.bytes, 0);
             for value in [
                 Tag::String(different.into()),
+                Tag::End,
+                Tag::Byte(0),
+                Tag::Byte(1),
+                Tag::List(vec![]),
+                Tag::Compound(Default::default()),
                 Tag::Int(if name == "small" { 0 } else { 1 }),
                 Tag::String(horizon_core::nbt::JavaString(vec![114, 101, 100, 0xd800])),
             ] {
@@ -125,6 +130,12 @@ fn salmon_size_recipe_defaults_removal_and_strictness_preserve_presence() {
     // Synthetic pack-provided prototype: vanilla salmon buckets have no size component.
     // Salmon.Variant.DEFAULT is a mob default, not an item prototype default.
     let mut items = Items::empty();
+    std::sync::Arc::make_mut(&mut items.component_registry)
+        .by_registry
+        .entry("minecraft:data_component_type".into())
+        .or_default()
+        .ids
+        .push("minecraft:custom_data".into());
     items.component_defaults = std::sync::Arc::new(std::collections::HashMap::from([(
         "minecraft:salmon_bucket".into(),
         match Tag::compound([("minecraft:salmon/size", Tag::String("small".into()))]) {
@@ -161,6 +172,24 @@ fn salmon_size_recipe_defaults_removal_and_strictness_preserve_presence() {
     assert!(loose.craft(&context, &[Some(egg.clone())], 1).is_some());
     assert!(exact.craft(&context, &[Some(egg.clone())], 1).is_none());
     egg.data_mut().set_other("minecraft:custom_data", None);
+    egg.data_mut().set_other("minecraft:custom_data", None);
+    for (value, matches_default) in [("small", true), ("medium", false)] {
+        egg.data_mut()
+            .set_loot_component("minecraft:salmon/size", &Some(Tag::String(value.into())));
+        assert_eq!(
+            exact.craft(&context, &[Some(egg.clone())], 1).is_some(),
+            matches_default
+        );
+        assert!(removal.craft(&context, &[Some(egg.clone())], 1).is_none());
+    }
+    egg.data_mut()
+        .set_loot_component("minecraft:salmon/size", &None);
+    egg.data_mut().set_loot_component(
+        "!minecraft:salmon/size",
+        &Some(Tag::Compound(Default::default())),
+    );
+    assert!(exact.craft(&context, &[Some(egg.clone())], 1).is_none());
+    assert!(removal.craft(&context, &[Some(egg.clone())], 1).is_some());
     let removed = Tag::compound([(
         "!minecraft:salmon/size",
         Tag::compound([] as [(&str, Tag); 0]),
@@ -227,4 +256,81 @@ fn salmon_size_invalid_codec_payloads_omit_whole_recipes() {
         assert!(recipes.cooking.is_empty());
         assert!(recipes.by_type.values().all(|recipes| recipes.is_empty()));
     }
+}
+
+#[test]
+fn salmon_size_boundary_refusals_keep_a_valid_sibling() {
+    const ID: &str = "minecraft:salmon/size";
+    let items = Items::empty();
+    let load = load();
+    let context = load.loop_context(LoopSide::Server, []);
+    for value in [
+        Tag::End,
+        Tag::Byte(0),
+        Tag::Byte(1),
+        Tag::Short(0),
+        Tag::Long(0),
+        Tag::Float(0.0),
+        Tag::Double(0.0),
+        Tag::List(vec![]),
+        Tag::Compound(Default::default()),
+        Tag::String(horizon_core::nbt::JavaString(vec![0xd800])),
+    ] {
+        let rule = IngredientRule::Components {
+            patch: [(ID.into(), value)].into_iter().collect(),
+            removed: vec![],
+            strict: false,
+        };
+        assert!(
+            components::validate(&rule, &items)
+                .unwrap_err()
+                .starts_with(&format!("component {ID}: "))
+        );
+    }
+    let unknown = IngredientRule::Components {
+        patch: [(ID.into(), Tag::String("unknown".into()))]
+            .into_iter()
+            .collect(),
+        removed: vec![],
+        strict: false,
+    };
+    assert_eq!(
+        components::validate(&unknown, &items),
+        Err(format!("component {ID}: Unknown element name:unknown"))
+    );
+    for payload in [
+        serde_json::json!(null),
+        serde_json::json!(false),
+        serde_json::json!(true),
+        serde_json::json!(0),
+        serde_json::json!(1),
+        serde_json::json!(1.0),
+        serde_json::json!([]),
+        serde_json::json!({}),
+        serde_json::json!("unknown"),
+        serde_json::json!("arctic"),
+        serde_json::json!("snow"),
+        serde_json::json!(""),
+        serde_json::json!("minecraft:small"),
+        serde_json::json!("SMALL"),
+    ] {
+        let ingredient = serde_json::json!({"type":"neoforge:components", "items":"minecraft:salmon_bucket", "components":{(ID):payload}});
+        assert!(Ingredient::parse(&ingredient, &items).is_none());
+        let root = tempfile::tempdir().unwrap();
+        let recipes = crate::crafting::Recipes::from_sources(root.path(), &items, &horizon_world::loot::PackOverlay::NONE, vec![
+            ("fixture:bad".into(), serde_json::json!({"type":"minecraft:crafting_shapeless", "ingredients":[ingredient], "result":{"id":"minecraft:diamond"}})),
+            ("fixture:good".into(), serde_json::json!({"type":"minecraft:crafting_shapeless", "ingredients":["minecraft:stick"], "result":{"id":"minecraft:emerald"}})),
+        ], &load).unwrap();
+        assert_eq!(recipes.crafting.len(), 1);
+        assert_eq!(
+            recipes
+                .craft(&context, &[Some(ItemStack::new("minecraft:stick", 1))], 1)
+                .unwrap()
+                .item
+                .as_ref(),
+            "minecraft:emerald"
+        );
+    }
+    let whole_null = serde_json::json!({"type":"neoforge:components", "items":"minecraft:salmon_bucket", "components":null});
+    assert!(Ingredient::parse(&whole_null, &items).is_none());
 }

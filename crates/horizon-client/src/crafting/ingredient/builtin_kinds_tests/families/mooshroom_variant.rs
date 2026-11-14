@@ -58,6 +58,11 @@ fn mooshroom_variant_recipe_codec_preserves_names_defaults_removal_and_strictnes
         for value in [
             Tag::String(different.into()),
             Tag::Int(0),
+            Tag::End,
+            Tag::Byte(0),
+            Tag::Byte(1),
+            Tag::List(vec![]),
+            Tag::Compound(Default::default()),
             Tag::String(horizon_core::nbt::JavaString(vec![114, 101, 100, 0xd800])),
         ] {
             egg.data_mut()
@@ -92,6 +97,12 @@ fn mooshroom_variant_recipe_codec_preserves_names_defaults_removal_and_strictnes
     // A pack-supplied prototype exercises inheritance independently of vanilla's
     // absent item default (MushroomCow.Variant.DEFAULT is only the mob default).
     let mut defaults = Items::empty();
+    std::sync::Arc::make_mut(&mut defaults.component_registry)
+        .by_registry
+        .entry("minecraft:data_component_type".into())
+        .or_default()
+        .ids
+        .push("minecraft:custom_data".into());
     defaults.component_defaults = std::sync::Arc::new(std::collections::HashMap::from([(
         "minecraft:mooshroom_spawn_egg".into(),
         match Tag::compound([("minecraft:mooshroom/variant", Tag::String("brown".into()))]) {
@@ -123,6 +134,26 @@ fn mooshroom_variant_recipe_codec_preserves_names_defaults_removal_and_strictnes
         .set_other("minecraft:custom_data", Some(Tag::Int(3)));
     assert!(loose.craft(&context, &[Some(egg.clone())], 1).is_some());
     assert!(exact.craft(&context, &[Some(egg.clone())], 1).is_none());
+    egg.data_mut().set_other("minecraft:custom_data", None);
+    for (value, matches_default) in [("brown", true), ("red", false)] {
+        egg.data_mut().set_loot_component(
+            "minecraft:mooshroom/variant",
+            &Some(Tag::String(value.into())),
+        );
+        assert_eq!(
+            exact.craft(&context, &[Some(egg.clone())], 1).is_some(),
+            matches_default
+        );
+        assert!(removal.craft(&context, &[Some(egg.clone())], 1).is_none());
+    }
+    egg.data_mut()
+        .set_loot_component("minecraft:mooshroom/variant", &None);
+    egg.data_mut().set_loot_component(
+        "!minecraft:mooshroom/variant",
+        &Some(Tag::Compound(Default::default())),
+    );
+    assert!(exact.craft(&context, &[Some(egg.clone())], 1).is_none());
+    assert!(removal.craft(&context, &[Some(egg.clone())], 1).is_some());
     let removed = Tag::compound([(
         "!minecraft:mooshroom/variant",
         Tag::compound([] as [(&str, Tag); 0]),
@@ -145,4 +176,81 @@ fn mooshroom_variant_recipe_codec_preserves_names_defaults_removal_and_strictnes
             )
             .is_some()
     );
+}
+
+#[test]
+fn mooshroom_variant_boundary_refusals_keep_a_valid_sibling() {
+    const ID: &str = "minecraft:mooshroom/variant";
+    let items = Items::empty();
+    let load = load();
+    let context = load.loop_context(LoopSide::Server, []);
+    for value in [
+        Tag::End,
+        Tag::Byte(0),
+        Tag::Byte(1),
+        Tag::Short(0),
+        Tag::Long(0),
+        Tag::Float(0.0),
+        Tag::Double(0.0),
+        Tag::List(vec![]),
+        Tag::Compound(Default::default()),
+        Tag::String(horizon_core::nbt::JavaString(vec![0xd800])),
+    ] {
+        let rule = IngredientRule::Components {
+            patch: [(ID.into(), value)].into_iter().collect(),
+            removed: vec![],
+            strict: false,
+        };
+        assert!(
+            components::validate(&rule, &items)
+                .unwrap_err()
+                .starts_with(&format!("component {ID}: "))
+        );
+    }
+    let unknown = IngredientRule::Components {
+        patch: [(ID.into(), Tag::String("unknown".into()))]
+            .into_iter()
+            .collect(),
+        removed: vec![],
+        strict: false,
+    };
+    assert_eq!(
+        components::validate(&unknown, &items),
+        Err(format!("component {ID}: Unknown element name:unknown"))
+    );
+    for payload in [
+        serde_json::json!(null),
+        serde_json::json!(false),
+        serde_json::json!(true),
+        serde_json::json!(0),
+        serde_json::json!(1),
+        serde_json::json!(1.0),
+        serde_json::json!([]),
+        serde_json::json!({}),
+        serde_json::json!("unknown"),
+        serde_json::json!("arctic"),
+        serde_json::json!("snow"),
+        serde_json::json!(""),
+        serde_json::json!("minecraft:brown"),
+        serde_json::json!("BROWN"),
+    ] {
+        let ingredient = serde_json::json!({"type":"neoforge:components", "items":"minecraft:mooshroom_spawn_egg", "components":{(ID):payload}});
+        assert!(Ingredient::parse(&ingredient, &items).is_none());
+        let root = tempfile::tempdir().unwrap();
+        let recipes = crate::crafting::Recipes::from_sources(root.path(), &items, &horizon_world::loot::PackOverlay::NONE, vec![
+            ("fixture:bad".into(), serde_json::json!({"type":"minecraft:crafting_shapeless", "ingredients":[ingredient], "result":{"id":"minecraft:diamond"}})),
+            ("fixture:good".into(), serde_json::json!({"type":"minecraft:crafting_shapeless", "ingredients":["minecraft:stick"], "result":{"id":"minecraft:emerald"}})),
+        ], &load).unwrap();
+        assert_eq!(recipes.crafting.len(), 1);
+        assert_eq!(
+            recipes
+                .craft(&context, &[Some(ItemStack::new("minecraft:stick", 1))], 1)
+                .unwrap()
+                .item
+                .as_ref(),
+            "minecraft:emerald"
+        );
+    }
+    let whole_null = serde_json::json!({"type":"neoforge:components", "items":"minecraft:mooshroom_spawn_egg", "components":null});
+    assert!(Ingredient::parse(&whole_null, &items).is_none());
 }
