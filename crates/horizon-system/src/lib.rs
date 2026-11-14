@@ -5,13 +5,12 @@
 //! Horizon layer (docs/layers.md#engine).
 //!
 //! Only what explains performance: no serial number, host name, user name or path is read. The
-//! slower probes (a command to run) are read once per process.
-/// Taking out of text what could say who or where a player is, before a report keeps it: the
-/// repro bundle's export and opt-in telemetry's crash reports.
-pub mod scrub;
-
+//! slower probes (a command to run) are read once per process. [`scrub`] reads the user name only
+//! to take it out of text that leaves the machine (a telemetry item, a bug report's bundle).
 use std::path::Path;
 use std::sync::OnceLock;
+
+pub mod scrub;
 
 /// What `program args` prints, trimmed, when it succeeds and prints something. On Windows the
 /// program opens no console window: a GUI launcher or a game started without one would flash a

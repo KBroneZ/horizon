@@ -24,7 +24,8 @@ pub mod server_status;
 /// The machine's probes, from the platform (`horizon-system`). Kept at this path for the
 /// launcher and the benchmark.
 pub use horizon_platform::system;
-/// The scrubber, from the platform (`horizon-system`). Kept at this path for the launcher.
+/// Takes private text out before it leaves (`horizon_system::scrub`). Kept at this path for the
+/// launcher.
 pub use horizon_platform::system::scrub;
 #[cfg(feature = "upload")]
 pub mod upload;

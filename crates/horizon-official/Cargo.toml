@@ -18,7 +18,7 @@ horizon-friends = { path = "../horizon-friends", features = ["game"] }
 horizon-official-servers = { path = "../horizon-official-servers" }
 horizon-discord = { path = "../horizon-discord" }
 horizon-telemetry = { path = "../horizon-telemetry", default-features = false, features = ["game"] }
-horizon-bench = { path = "../horizon-bench", features = ["game"] }
+horizon-perf-share = { path = "../horizon-perf-share" }
 log = "0.4"
 
 [build-dependencies]

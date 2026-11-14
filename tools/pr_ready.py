@@ -349,10 +349,9 @@ def mark_old_rust(steps, warning):
     steps.insert(steps.index(clippy[0]), rust)
 
 
-# The features another workspace package turns on for these crates: horizon-mods' index, and the game parts
-# horizon-official runs (telemetry's and the benchmark's `game`).
-WORKSPACE_FEATURES = {"horizon-mods": "horizon-mods/index", "horizon-telemetry": "horizon-telemetry/game",
-                      "horizon-bench": "horizon-bench/game"}
+# The features another workspace package turns on for these crates: horizon-mods' index, and the game part
+# horizon-official runs (telemetry's `game`).
+WORKSPACE_FEATURES = {"horizon-mods": "horizon-mods/index", "horizon-telemetry": "horizon-telemetry/game"}
 
 
 def mod_features(crates):
