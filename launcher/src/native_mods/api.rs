@@ -467,7 +467,13 @@ pub(super) fn stage(
     let ids: Vec<_> = mods.iter().map(|(_, bundle)| bundle.id.as_str()).collect();
     fs::write(
         game.join("src/main.rs"),
-        main_rs(&ids, names_mods(stage), official, platform, allocator(stage)),
+        main_rs(
+            &ids,
+            names_mods(stage),
+            official,
+            platform,
+            allocator(stage),
+        ),
     )
     .map_err(|e| e.to_string())?;
     let root = stage.join("Cargo.toml");
