@@ -95,6 +95,10 @@ impl Hooks for Telemetry {
     fn crashed(&self, crash: &hooks::Crash<'_>) {
         keep_crash(crash);
     }
+
+    fn benchmarked(&self, run: &hooks::Benchmarked<'_>) {
+        keep_benchmark(run);
+    }
 }
 
 fn mark_ready(mark: &AtomicU32, since_start: Duration) {
@@ -183,6 +187,22 @@ pub fn crash_item(report: &hooks::Crash<'_>) -> Item {
 pub fn keep_crash(report: &hooks::Crash<'_>) {
     if let Err(e) = outbox::push(report.home, &crash_item(report)) {
         log::warn!("Horizon: could not keep the crash report to send: {e}");
+    }
+}
+
+/// Keeps a benchmark report (`--benchmark`) for the launcher to send, if the player allows
+/// benchmark uploads: the report as docs/benchmark-report.md defines it, dated to the day.
+pub fn keep_benchmark(run: &hooks::Benchmarked<'_>) {
+    let data = match serde_json::from_str::<serde_json::Value>(run.report) {
+        Ok(data) => data,
+        Err(e) => {
+            log::warn!("Horizon: the benchmark report to send is not JSON: {e}");
+            return;
+        }
+    };
+    let item = Item::new(Source::Game, run.version, Payload::Benchmark(data));
+    if let Err(e) = outbox::push(run.home, &item) {
+        log::warn!("Horizon: could not keep the benchmark report to send: {e}");
     }
 }
 
@@ -441,6 +461,34 @@ mod tests {
         let pending = outbox::pending(&home);
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].1.kind(), Kind::Crash);
+    }
+
+    #[test]
+    fn a_benchmark_is_kept_only_with_its_consent() {
+        let home = home("benchmark");
+        let run = hooks::Benchmarked {
+            home: &home,
+            version: "v2026.10.15",
+            report: r#"{"kind":"benchmark"}"#,
+        };
+        keep_benchmark(&run);
+        assert!(outbox::pending(&home).is_empty());
+        allow(
+            &home,
+            Choices {
+                benchmarks: true,
+                ..Choices::NONE
+            },
+        );
+        keep_benchmark(&hooks::Benchmarked {
+            report: "not json",
+            ..run
+        });
+        assert!(outbox::pending(&home).is_empty());
+        keep_benchmark(&run);
+        let pending = outbox::pending(&home);
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].1.kind(), Kind::Benchmark);
     }
 
     #[test]

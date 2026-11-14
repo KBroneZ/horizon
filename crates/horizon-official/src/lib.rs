@@ -21,10 +21,11 @@ const PARTS: [&dyn Hooks; 6] = [
     &horizon_official_servers::HOOKS,
     // "Playing Horizon" on the player's Discord profile.
     &horizon_discord::HOOKS,
-    // Opt-in telemetry: the play session's summary and crash reports, kept for the launcher.
+    // Opt-in telemetry: the play session's summary, crash and benchmark reports, kept for the
+    // launcher.
     &horizon_telemetry::game::HOOKS,
-    // `--benchmark SCENARIO`: the built-in benchmark (docs/benchmark.md).
-    &horizon_bench::game::HOOKS,
+    // Open and Share for saved performance captures.
+    &horizon_perf_share::HOOKS,
 ];
 /// Their settings, in the player's settings files.
 const STORES: [&dyn settings::Store; 1] = [&horizon_discord::SETTING];

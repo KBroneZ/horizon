@@ -25,7 +25,7 @@ default = ["upload", "live"]
 upload = ["dep:ureq"]
 # The "I'm playing" ping and reading the live count (`live`), for the game and the launcher.
 live = ["dep:ureq"]
-# The game's part (`game`): the play session's summary and crash reports, kept through the
+# The game's part (`game`): the play session's summary, crash and benchmark reports, kept through the
 # platform's hooks. The official executable turns it on.
 game = ["dep:log"]
 
