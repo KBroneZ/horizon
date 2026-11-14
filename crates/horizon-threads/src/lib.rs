@@ -8,6 +8,7 @@ pub mod allocator_stats;
 /// The game window's boot screen, before wgpu's first frame paints over it.
 #[cfg(target_os = "windows")]
 pub mod boot_paint;
+pub mod callgrind;
 pub mod heap_census;
 #[cfg(target_os = "linux")]
 pub mod heap_sample;
@@ -48,7 +49,7 @@ pub fn worker_count() -> usize {
 /// `HORIZON_SERIAL_TICK=all`: every [`par_chunks_mut`] keeps its chunks on the
 /// calling thread, in order — the serial reference a parallel phase of the
 /// tick is checked against, tick by tick (#8158).
-fn serial_tick_all() -> bool {
+pub fn serial_tick_all() -> bool {
     static ALL: OnceLock<bool> = OnceLock::new();
     *ALL.get_or_init(|| {
         std::env::var("HORIZON_SERIAL_TICK").is_ok_and(|v| v.eq_ignore_ascii_case("all"))

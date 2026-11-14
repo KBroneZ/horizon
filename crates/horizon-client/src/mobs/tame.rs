@@ -297,13 +297,14 @@ fn teleport_to_owner(m: &mut Mob, w: &MobWorld) {
         let yd = m.random.next_int_bound(3).unwrap_or(0) - 1;
         let p = [base[0] + xd, base[1] + yd, base[2] + zd];
         if can_teleport_to(m, w, p) {
-            super::living::teleports::snap_to(
+            super::living::teleports::snap_to_with(
                 m,
                 Vec3::new(
                     f64::from(p[0]) + 0.5,
                     f64::from(p[1]),
                     f64::from(p[2]) + 0.5,
                 ),
+                w.section_writer.clone(),
             );
             m.nav_stop();
             return;
@@ -1445,7 +1446,11 @@ fn give_morning_gift(m: &mut Mob, cx: &mut Cx) {
             && !(fluids.in_water || fluids.in_lava)
             && !in_box(&dangerous)
         {
-            super::living::teleports::snap_to(m, Vec3::new(f64::from(x), feet, f64::from(z)));
+            super::living::teleports::snap_to_with(
+                m,
+                Vec3::new(f64::from(x), feet, f64::from(z)),
+                w.section_writer.clone(),
+            );
             m.velocity = Vec3::ZERO;
         }
     }
@@ -1858,7 +1863,10 @@ mod tests {
                 m
             })
             .collect();
-        let seen: Vec<Seen> = mobs.iter().map(|m| m.seen(None)).collect();
+        let seen: Vec<Seen> = mobs
+            .iter()
+            .map(|m| m.seen(None, &crate::items::Items::empty()))
+            .collect();
         let grid = SeenGrid::new(seen.iter().map(|s| s.bounds));
         with_test_world(&seen, |w, _| {
             let indexed = MobWorld {
@@ -2210,7 +2218,7 @@ mod tests {
         ] {
             let mut seeker = named(species, name, 1, seeker_sat);
             let partner = named(species, name, 2, partner_sat);
-            let seen = [partner.seen(None)];
+            let seen = [partner.seen(None, &crate::items::Items::empty())];
             with_test_world(&seen, |w, _| {
                 let mut events = Vec::new();
                 let mut test_level = crate::health::TestLevel::new(0);
@@ -2301,7 +2309,7 @@ mod tests {
                 if !alive {
                     attacker.health = 0.0;
                 }
-                let seen = [attacker.seen(None)];
+                let seen = [attacker.seen(None, &crate::items::Items::empty())];
                 let world = crate::mobs::MobWorld {
                     others: &seen,
                     ..world
@@ -2618,13 +2626,13 @@ mod non_tame_tests {
             m.ai.goals = goals;
             running
         };
-        let land = [turtle.seen(None)];
+        let land = [turtle.seen(None, &crate::items::Items::empty())];
         let mut started = None;
         if !with_test_world(&land, |w, _| started = Some(tick(&mut m, w))) {
             return;
         }
         turtle.fluids.in_water = true;
-        let water = [turtle.seen(None)];
+        let water = [turtle.seen(None, &crate::items::Items::empty())];
         let mut stopped = None;
         if !with_test_world(&water, |w, _| stopped = Some(!tick(&mut m, w))) {
             return;

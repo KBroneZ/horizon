@@ -24,7 +24,9 @@ pub fn check() {
 
     let off = std::collections::BTreeMap::from([("lit".into(), "false".into())]);
     let on = std::collections::BTreeMap::from([("lit".into(), "true".into())]);
-    mod_api::__private::resolve_block_keys(["fixture:lamp"], |_| {
+    // The compiled fixture mod also asks for the water cauldron (its host-read checks), so the
+    // completed registry holds it; this harness gives every block the same two-state lamp shape.
+    mod_api::__private::resolve_block_keys(["fixture:lamp", "minecraft:water_cauldron"], |_| {
         horizon_mod_runtime::block_definitions::BlockDefinition::new(&[&off, &on], 0)
             .map_err(|error| format!("{error:?}"))
     })
@@ -34,7 +36,7 @@ pub fn check() {
     let second = mod_api::BlockState::from(mod_api::BlockStateRecord::new(block, 1));
     let text = mod_api::Text::literal("fixture: café 水");
     let mut args = mod_points::ListenerFixtureMirrorsArgs::__new(text.clone(), first, second);
-    mod_points::dispatch::listener_fixture_mirrors(&mut args);
+    horizon_engine_slots::dispatch::listener_fixture_mirrors(&mut args);
     assert!(args.cancel, "the mirror listener must have executed");
     assert_eq!(args.text, mod_api::Text::literal("fixture: café 水"));
     let metadata = mod_api::__private::block_definitions().unwrap();

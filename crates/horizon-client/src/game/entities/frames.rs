@@ -376,6 +376,11 @@ impl Game<'_> {
             }
             return true;
         }
+        // `isInvulnerableToBase`: a refused hit goes on to onAttack, as a fixed frame's does.
+        if self.native_player_hit_invulnerable(self.item_frames[i].id, self.item_frames[i].kind()) {
+            self.attack_ticks = 0;
+            return true;
+        }
         self.hit_frame(i, true, self.creative);
         true
     }
@@ -567,6 +572,7 @@ impl Game<'_> {
                     / diameter;
             if dist > 1.0
                 || self.item_frames[i].fixed
+                || !self.combat.visits(self.item_frames[i].id)
                 || !self.break_frame_by(i, self.explosion_kill_credit())
             {
                 i += 1;

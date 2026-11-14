@@ -60,7 +60,7 @@ impl Game<'_> {
             .chunks
             .get(&(key.0 >> 4, key.2 >> 4))
             .and_then(|c| c.saved.as_ref())
-            .is_some_and(|s| s.rolled_loot.iter().any(|r| r.pos == key))
+            .is_some_and(|s| s.pending_loot.contains_key(&key))
         {
             self.send_overlay_message(
                 Text::translate("container.spectatorCantOpen", &[])
@@ -524,6 +524,7 @@ impl Game<'_> {
                 256.0,
                 256.0,
             );
+            self.draw_screen_phase(batch, horizon_client::screen_draw::RenderPhase::Background);
             // ShulkerBoxScreen draws the menu's title: the box's custom name
             // (BaseContainerBlockEntity.getDisplayName) or its default name.
             let title = self.remote_menu_title().unwrap_or_else(|| {
@@ -555,6 +556,7 @@ impl Game<'_> {
             r.u1 = r.u0 + 176.0 * du;
             batch.rect_uv(ox, oy + top, 176.0, 96.0, r, u32::MAX);
         }
+        self.draw_screen_phase(batch, horizon_client::screen_draw::RenderPhase::Background);
         let title = self.chest_title(rows);
         super::screen_info::name_container(|| title.plain());
         batch.text_styled(atlas, &title, ox + 8.0, oy + 6.0, grey, false);

@@ -407,7 +407,7 @@ impl Game<'_> {
         let data = self.options.resources.join("data");
         // The world's packs' advancements go over the game's own, and a
         // native mod's contributed files are already among them: the tables
-        // were built for this open (`build_world_tables`), so the hook is
+        // were built for this open (`stage_world_tables`), so the hook is
         // asked once, not again here.
         let files = match &self.world_tables {
             Some(tables) => tables.files.clone(),
@@ -1172,7 +1172,7 @@ impl Game<'_> {
             // A network player's client shows its own toast.
             if d.show_toast && !self.adv.quiet && self.lan_acting.is_none() {
                 self.add_advancement_toast(Toast {
-                    icon: d.icon.clone(),
+                    icon: d.icon.item.to_string(),
                     frame: d.frame,
                     title: Text::translate(toast_label(d.frame).0, &[]),
                     description: Some(text_of(&d.title)),
@@ -1280,7 +1280,7 @@ impl Game<'_> {
         self.adv.last_inventory = key;
         // Native mods hear the change before any criterion is looked at, so
         // they do with no `inventory_changed` advancement in the tree too
-        // (`native_player_inventory_changed`, API @API:player_inventory_changed@).
+        // (`native_player_inventory_changed`, API 579).
         if self.remote.is_none()
             && !self.no_player_here()
             && mod_api::__private::listened(mod_api::HookId::PlayerInventoryChanged)
@@ -2603,7 +2603,7 @@ impl Game<'_> {
         for (a, icon) in p.added.into_iter().zip(icons) {
             list.retain(|o| o.id != a.id);
             let display = a.display.map(|d| adv::Display {
-                icon,
+                icon: horizon_client::items::ItemStack::new(&icon, 1),
                 title: tag_to_json(&d.title),
                 description: tag_to_json(&d.description),
                 frame: match d.frame {
@@ -2663,7 +2663,7 @@ impl Game<'_> {
                 && let Some(d) = a.display.as_ref().filter(|d| d.show_toast)
             {
                 self.add_advancement_toast(Toast {
-                    icon: d.icon.clone(),
+                    icon: d.icon.item.to_string(),
                     frame: d.frame,
                     title: Text::translate(toast_label(d.frame).0, &[]),
                     description: Some(text_of(&d.title)),
@@ -2720,8 +2720,9 @@ mod tests {
             let mut helmet = ItemStack::new("minecraft:iron_helmet", 1);
             helmet.damage = 164;
             game.armor[0] = Some(helmet);
-            let source = game.motion.health.damage.id("minecraft:falling_anvil");
-            game.hurt_helmet(source.unwrap(), 8.0);
+            let source =
+                horizon_client::health::NO_ATTACK.player_source("minecraft:falling_anvil", 0);
+            game.hurt_helmet(&source, 8.0);
             assert_eq!(game.armor[0], None);
             assert!(game.adv.progress.has(ID, "worn"));
         });
@@ -3140,7 +3141,7 @@ mod tests {
             id: "quests:board".into(),
             parent: None,
             display: Some(adv::Display {
-                icon: "minecraft:book".into(),
+                icon: horizon_client::items::ItemStack::new("minecraft:book", 1),
                 title,
                 description,
                 frame: Frame::Task,
@@ -3367,9 +3368,7 @@ mod structure_tag_tests {
             &[],
             &[],
         );
-        let (tables, _) = game
-            .build_world_tables(&stack, false, &root, false)
-            .unwrap();
+        let (tables, _, _) = game.stage_world_tables(&stack, false, &root).unwrap();
         game.world_tables = tables;
         assert!(game.world_tables.is_some());
         assert!(holds(&game, "#mypack:village", "minecraft:igloo"));

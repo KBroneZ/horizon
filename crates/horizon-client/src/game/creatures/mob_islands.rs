@@ -357,6 +357,7 @@ impl Islands<'_> {
         let (first, first_ticking) = parts.next().expect("a plan has groups");
         #[cfg(test)]
         let failure = FAIL_THREADS.with(|f| f.borrow().clone());
+        let sampling = super::super::tick_profile::sampling();
         std::thread::scope(|s| {
             // Guards for every not-yet-started lane live inside the scope's callback. If the
             // OS refuses a spawn, they drop before scope joins any started, waiting threads.
@@ -403,7 +404,9 @@ impl Islands<'_> {
                             }
                         }
                         horizon_client::mobs::sulfur_cube::set_tnt_explodes(tnt);
+                        super::super::tick_profile::begin_helper(sampling);
                         horizon_client::block_contact::in_level(level, || run(g, ticking));
+                        super::super::tick_profile::end_helper()
                     })
                     .expect("a mob island's thread starts");
                 handles.push(handle);
@@ -412,10 +415,13 @@ impl Islands<'_> {
             drop(first_done);
             let mut panic = None;
             for handle in handles {
-                if let Err(payload) = handle.join()
-                    && panic.is_none()
-                {
-                    panic = Some(payload);
+                match handle.join() {
+                    Ok(costs) => super::super::tick_profile::merge(costs),
+                    Err(payload) => {
+                        if panic.is_none() {
+                            panic = Some(payload);
+                        }
+                    }
                 }
             }
             if let Some(payload) = panic {
@@ -1043,7 +1049,7 @@ mod tests {
                         .unwrap();
                 }
                 let mobs: Vec<Mob> = std::mem::take(&mut game.mobs).into();
-                let snapshot = mobs.iter().map(|m| m.seen(None)).collect();
+                let snapshot = mobs.iter().map(|m| m.seen(None, game.items())).collect();
                 let base = game.mob_world_base(&[]);
                 let players = super::super::super::natural_spawning::NearestPlayers::new(&[]);
                 let nearest = super::super::prep::MobsNearest::new(&players, &mobs, false);
@@ -1071,6 +1077,7 @@ mod tests {
                 };
                 let shared = Shared {
                     uuid: None,
+                    items: game.items(),
                     level_id: "minecraft:overworld",
                     path_changes: &[],
                     guest_ids: &[],
@@ -1125,7 +1132,10 @@ mod tests {
         game.spawn_mob("minecraft:cow", [0.5, 65.0, 0.5], true)
             .unwrap();
         let mobs = game.mobs.to_vec();
-        let snapshot = mobs.iter().map(|m| m.seen(None)).collect::<Vec<_>>();
+        let snapshot = mobs
+            .iter()
+            .map(|m| m.seen(None, game.items()))
+            .collect::<Vec<_>>();
         let mut random = horizon_core::random::LegacyRandom::new(7);
         random.next_gaussian();
         let start = Start {
@@ -1291,7 +1301,7 @@ mod tests {
                 Mob::new(i, Arc::clone(&kind), Vec3::new(x, 65.0, z), 0.0)
             })
             .collect();
-        let mut snapshot: Vec<_> = mobs.iter().map(|m| m.seen(None)).collect();
+        let mut snapshot: Vec<_> = mobs.iter().map(|m| m.seen(None, game.items())).collect();
         let base = game.mob_world_base(&[]);
         let players = super::super::super::natural_spawning::NearestPlayers::new(&[]);
         let nearest = super::super::prep::MobsNearest::new(&players, &mobs, false);
@@ -1386,7 +1396,7 @@ mod tests {
         let mut game = super::super::super::native_machines::tests::server_game();
         game.spawn_mob("minecraft:cow", [0.5, 65.0, 0.5], true)
             .unwrap();
-        let template = game.mobs[0].seen(None);
+        let template = game.mobs[0].seen(None, game.items());
         let (sent, finished) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let draws = OrderedDraws::new(&horizon_core::random::LegacyRandom::new(7), 2);
@@ -1479,7 +1489,7 @@ mod tests {
             .collect();
         horizon_client::mobs::riders::link(&mut mobs, 11, 10);
         horizon_client::mobs::riders::link(&mut mobs, 13, 12);
-        let snapshot: Vec<_> = mobs.iter().map(|m| m.seen(None)).collect();
+        let snapshot: Vec<_> = mobs.iter().map(|m| m.seen(None, game.items())).collect();
         // A passenger is repositioned after the initial snapshot: one enters the ticking area,
         // another leaves the loaded area. The turn must not reuse those initial roles.
         mobs[1].position.x = 1.5;
@@ -1510,6 +1520,7 @@ mod tests {
         };
         let shared = Shared {
             uuid: None,
+            items: game.items(),
             level_id: "minecraft:overworld",
             path_changes: &[],
             guest_ids: &[],
@@ -1822,6 +1833,31 @@ mod tests {
         }
     }
 
+    /// With the villagers on their own random (`parallel::villagers_own_random`), villagers in one
+    /// herd tick in groups beside the other herds and leave the mobs and the level random as the
+    /// serial loop does, since the serial loop draws the same way while the switch is on.
+    #[test]
+    #[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+    fn villagers_on_their_own_random_tick_in_groups_as_serial() {
+        struct Reset;
+        impl Drop for Reset {
+            fn drop(&mut self) {
+                horizon_client::parallel::OWN_RANDOM_TEST
+                    .store(false, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+        let _reset = Reset;
+        horizon_client::parallel::OWN_RANDOM_TEST.store(true, std::sync::atomic::Ordering::Relaxed);
+        let mut game = separated_herds_game();
+        for k in 0..12 {
+            let x = 4.0 + f64::from(k % 6) * 2.0;
+            let z = 14.0 + f64::from(k / 6) * 2.0;
+            assert!(game.run_command(&format!("summon villager {x:.1} 66 {z:.1}")));
+        }
+        let groups = grouped_as_serial(&mut game, 30, "villagers", |_| {});
+        assert_eq!(groups, groups_for(3));
+    }
+
     /// `plan` stays serial while a mob holds, in either hand, an item whose consumable teleports
     /// its eater, whatever the species; the same mobs plan normally with a plain item.
     #[test]
@@ -1852,7 +1888,7 @@ mod tests {
                 Mob::new(i, Arc::clone(&kind), Vec3::new(x, 65.0, z), 0.0)
             })
             .collect();
-        let snapshot: Vec<_> = mobs.iter().map(|m| m.seen(None)).collect();
+        let snapshot: Vec<_> = mobs.iter().map(|m| m.seen(None, game.items())).collect();
         let base = game.mob_world_base(&[]);
         let players = super::super::super::natural_spawning::NearestPlayers::new(&[]);
         let nearest = super::super::prep::MobsNearest::new(&players, &mobs, false);
