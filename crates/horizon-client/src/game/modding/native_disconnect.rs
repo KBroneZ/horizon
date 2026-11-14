@@ -26,6 +26,12 @@ impl Game<'_> {
         Ok(())
     }
 
+    /// What follows the frame's render: the cursor icon, then a mod's `disconnect` (below).
+    pub(in crate::game) fn native_frame_end(&mut self) -> Result<()> {
+        horizon_client::spans::time("pr_cursor", || self.apply_cursor_icon());
+        self.native_leave_if_asked()
+    }
+
     /// The end of the frame: a mod's `disconnect` leaves now, outside every hook. With a
     /// reason, the disconnect screen shows it; with none, the pause menu's Disconnect runs. A
     /// request from a world that has closed since is dropped.
