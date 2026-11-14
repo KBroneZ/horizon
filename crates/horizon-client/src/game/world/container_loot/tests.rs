@@ -1105,52 +1105,146 @@ fn container_fill_preserves_explicit_zero_damage_on_custom_durable_item() {
     });
 }
 
-macro_rules! groups {
-    ($($group:ident: [$($scenario:ident),+ $(,)?]),+ $(,)?) => {$(
-        #[test]
-        #[ignore = "daily"]
-        fn $group() {
-            if in_child(stringify!($group)) {
-                return;
-            }
-            run_group(&[$((stringify!($scenario), $scenario as fn())),+]);
-        }
-    )+};
+#[test]
+#[ignore = "daily"]
+fn transfers_between_containers() {
+    if in_child("transfers_between_containers") {
+        return;
+    }
+    run_group(&[
+        (
+            "hopper_pull_unpacks_source_once",
+            hopper_pull_unpacks_source_once as fn(),
+        ),
+        (
+            "hopper_push_unpacks_destination_once",
+            hopper_push_unpacks_destination_once as fn(),
+        ),
+        (
+            "hopper_minecart_pull_unpacks_source_once",
+            hopper_minecart_pull_unpacks_source_once as fn(),
+        ),
+        (
+            "dropper_push_unpacks_destination_once",
+            dropper_push_unpacks_destination_once as fn(),
+        ),
+        (
+            "dispenser_selection_unpacks_source_once",
+            dispenser_selection_unpacks_source_once as fn(),
+        ),
+        (
+            "double_chest_hopper_pull_reads_only_needed_half",
+            double_chest_hopper_pull_reads_only_needed_half as fn(),
+        ),
+        (
+            "double_chest_hopper_push_keeps_other_half_pending",
+            double_chest_hopper_push_keeps_other_half_pending as fn(),
+        ),
+    ]);
 }
 
-groups! {
-    transfers_between_containers: [
-        hopper_pull_unpacks_source_once,
-        hopper_push_unpacks_destination_once,
-        hopper_minecart_pull_unpacks_source_once,
-        dropper_push_unpacks_destination_once,
-        dispenser_selection_unpacks_source_once,
-        double_chest_hopper_pull_reads_only_needed_half,
-        double_chest_hopper_push_keeps_other_half_pending,
-    ],
-    player_and_world_triggers: [
-        player_open_uses_admitted_guest_luck_and_entity,
-        comparator_first_read_unpacks_and_measures,
-        block_break_unpacks_before_contents_drop,
-        explosion_unpacks_before_contents_drop,
-        double_chest_rolls_each_half_once,
-        chest_minecart_open_uses_opener_once,
-        chest_minecart_break_unpacks_before_drop,
-        detector_rail_comparator_unpacks_cart_once,
-    ],
-    commands_clone_and_structures: [
-        item_replace_unpacks_before_writing,
-        execute_if_items_unpacks_before_reading,
-        loot_insert_unpacks_before_inserting,
-        clone_copy_preserves_pending_loot_independently,
-        clone_move_transfers_pending_loot,
-        clone_selection_modes_match_pending_payloads,
-        structure_capture_disk_round_trip_keeps_pending_loot,
-        saved_carts_keep_a_loot_table_only_when_they_hold_a_container,
-    ],
-    seeds_and_fill_listeners: [
-        explicit_seed_is_position_independent,
-        container_fill_listener_contract,
-        container_fill_preserves_explicit_zero_damage_on_custom_durable_item,
-    ],
+#[test]
+#[ignore = "daily"]
+fn player_and_world_triggers() {
+    if in_child("player_and_world_triggers") {
+        return;
+    }
+    run_group(&[
+        (
+            "player_open_uses_admitted_guest_luck_and_entity",
+            player_open_uses_admitted_guest_luck_and_entity as fn(),
+        ),
+        (
+            "comparator_first_read_unpacks_and_measures",
+            comparator_first_read_unpacks_and_measures as fn(),
+        ),
+        (
+            "block_break_unpacks_before_contents_drop",
+            block_break_unpacks_before_contents_drop as fn(),
+        ),
+        (
+            "explosion_unpacks_before_contents_drop",
+            explosion_unpacks_before_contents_drop as fn(),
+        ),
+        (
+            "double_chest_rolls_each_half_once",
+            double_chest_rolls_each_half_once as fn(),
+        ),
+        (
+            "chest_minecart_open_uses_opener_once",
+            chest_minecart_open_uses_opener_once as fn(),
+        ),
+        (
+            "chest_minecart_break_unpacks_before_drop",
+            chest_minecart_break_unpacks_before_drop as fn(),
+        ),
+        (
+            "detector_rail_comparator_unpacks_cart_once",
+            detector_rail_comparator_unpacks_cart_once as fn(),
+        ),
+    ]);
+}
+
+#[test]
+#[ignore = "daily"]
+fn commands_clone_and_structures() {
+    if in_child("commands_clone_and_structures") {
+        return;
+    }
+    run_group(&[
+        (
+            "item_replace_unpacks_before_writing",
+            item_replace_unpacks_before_writing as fn(),
+        ),
+        (
+            "execute_if_items_unpacks_before_reading",
+            execute_if_items_unpacks_before_reading as fn(),
+        ),
+        (
+            "loot_insert_unpacks_before_inserting",
+            loot_insert_unpacks_before_inserting as fn(),
+        ),
+        (
+            "clone_copy_preserves_pending_loot_independently",
+            clone_copy_preserves_pending_loot_independently as fn(),
+        ),
+        (
+            "clone_move_transfers_pending_loot",
+            clone_move_transfers_pending_loot as fn(),
+        ),
+        (
+            "clone_selection_modes_match_pending_payloads",
+            clone_selection_modes_match_pending_payloads as fn(),
+        ),
+        (
+            "structure_capture_disk_round_trip_keeps_pending_loot",
+            structure_capture_disk_round_trip_keeps_pending_loot as fn(),
+        ),
+        (
+            "saved_carts_keep_a_loot_table_only_when_they_hold_a_container",
+            saved_carts_keep_a_loot_table_only_when_they_hold_a_container as fn(),
+        ),
+    ]);
+}
+
+#[test]
+#[ignore = "daily"]
+fn seeds_and_fill_listeners() {
+    if in_child("seeds_and_fill_listeners") {
+        return;
+    }
+    run_group(&[
+        (
+            "explicit_seed_is_position_independent",
+            explicit_seed_is_position_independent as fn(),
+        ),
+        (
+            "container_fill_listener_contract",
+            container_fill_listener_contract as fn(),
+        ),
+        (
+            "container_fill_preserves_explicit_zero_damage_on_custom_durable_item",
+            container_fill_preserves_explicit_zero_damage_on_custom_durable_item as fn(),
+        ),
+    ]);
 }
