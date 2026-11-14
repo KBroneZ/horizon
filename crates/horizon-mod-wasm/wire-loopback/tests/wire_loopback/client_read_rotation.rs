@@ -7,8 +7,9 @@ struct Client {
     look: Cell<(f32, f32)>,
 }
 impl mod_api::Host for Client {}
-mod_api::impl_host_areas!(Client, except(items));
-impl ItemsHost for Client {
+mod_api::impl_host_areas!(Client);
+// These are boundary reply fixtures, not an implementation of the game's name resolver.
+impl ItemsClientHost for Client {
     fn hover_name(&self, stack: &ItemStack) -> String {
         match stack.count() {
             1 => "Stone".into(),
@@ -18,7 +19,7 @@ impl ItemsHost for Client {
     }
 }
 impl mod_api::ClientHost for Client {}
-mod_api::impl_client_host_areas!(Client, except(client_view, services));
+mod_api::impl_client_host_areas!(Client, except(client_view, services, items));
 impl ServicesClientHost for Client {
     fn client_latency(&self) -> Option<u32> {
         self.world.get().then_some(87)
