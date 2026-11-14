@@ -14,8 +14,9 @@ revokes do not fire. The snapshot uses the same plain-data bindings in native an
 ## Display icons
 
 An advancement's `display.icon` is an item stack, including its count, damage and
-component patch. The toast, advancement widgets, tabs and hover draw that stack;
-LAN sends it through the same item-stack conversion as inventory synchronization.
+supported component patch. The toast, advancement widgets, tabs and hover draw that stack;
+LAN sends it through the same item-stack conversion as inventory synchronization, including
+explicit component removals resolved through the peer's component registry.
 Remote clients convert it once when receiving the advancement, not each frame.
 
 If a remote icon fails the custom-component permission check (including malformed

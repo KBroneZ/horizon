@@ -1739,19 +1739,20 @@ pub(super) fn network_stack(
                 Some(kind) => (true, kind),
                 None => (false, name.as_str()),
             };
-            if removed && kind == "minecraft:kinetic_weapon" {
-                stack
-                    .removed
-                    .push(horizon_protocol::item::component::KINETIC_WEAPON);
+            if removed {
+                // Resolve every removal through the peer's canonical registry, including
+                // built-ins without a modelled value. Earlier codec branches may have
+                // already recorded this removal.
+                if let Some(id) = synced_id("minecraft:data_component_type", kind)
+                    && !stack.removed.contains(&id)
+                {
+                    stack.removed.push(id);
+                }
             } else if horizon_protocol::item::custom::id(kind).is_some() {
                 if let Some(id) = synced_id("minecraft:data_component_type", kind) {
-                    if removed {
-                        stack.removed.push(id);
-                    } else {
-                        stack
-                            .added
-                            .push((id, horizon_protocol::item::Component::Nbt(value.clone())));
-                    }
+                    stack
+                        .added
+                        .push((id, horizon_protocol::item::Component::Nbt(value.clone())));
                 } else {
                     log::warn!("Cannot send custom component {kind} to this peer");
                 }
@@ -2387,6 +2388,41 @@ mod tests {
             assert_eq!(sent.removed, [kind]);
             assert!(sent.added.is_empty());
         }
+    }
+
+    #[test]
+    fn built_in_and_unmodelled_removals_round_trip_through_the_peer_registry() {
+        let mut item = ItemStack::new("minecraft:stone", 1);
+        for id in [
+            "minecraft:unbreakable",
+            "minecraft:item_model",
+            "example:unmodelled",
+        ] {
+            item.data_mut().set_other(id, None);
+            item.data_mut()
+                .set_other(&format!("!{id}"), Some(Tag::Compound(Default::default())));
+        }
+        let sent = stack_to_network(
+            |_| 1,
+            |registry, name| {
+                assert_eq!(registry, "minecraft:data_component_type");
+                match name {
+                    "minecraft:unbreakable" => Some(4),
+                    "minecraft:item_model" => Some(10),
+                    "example:unmodelled" => Some(300),
+                    _ => None,
+                }
+            },
+            &Some(item),
+        );
+        let mut writer = Writer::new();
+        horizon_protocol::item::Slot::write(&sent, &mut writer);
+        let mut reader = Reader::new(&writer.data);
+        let received = horizon_protocol::item::Slot::read(&mut reader)
+            .unwrap()
+            .unwrap();
+        assert_eq!(received.removed, [4, 10, 300]);
+        assert!(received.added.is_empty());
     }
 
     #[test]
