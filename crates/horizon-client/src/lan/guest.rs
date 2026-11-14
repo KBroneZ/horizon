@@ -1248,7 +1248,7 @@ pub fn stack_to_network(
     synced_id: impl Fn(&str, &str) -> Option<i32>,
     s: &Option<ItemStack>,
 ) -> Option<Stack> {
-    network_stack(&item_id, &synced_id, s)
+    Some(network_stack(&item_id, &synced_id, s.as_ref()?))
 }
 /// `ProvidesTrimMaterial.STREAM_CODEC`, `ProvidesBannerPatterns.STREAM_CODEC`,
 /// `AdventureModePredicate.STREAM_CODEC` and `ItemAttributeModifiers.STREAM_CODEC`:
@@ -1629,13 +1629,13 @@ fn trim_component(
         (material, pattern) => Component::TrimDirect { material, pattern },
     })
 }
-fn network_stack(
+/// Convert a borrowed item template with the same component codecs as inventory slots.
+pub(super) fn network_stack(
     item_id: &dyn Fn(&str) -> i32,
     synced_id: &dyn Fn(&str, &str) -> Option<i32>,
-    s: &Option<ItemStack>,
-) -> Option<Stack> {
+    s: &ItemStack,
+) -> Stack {
     let enchantment_id = |name: &str| synced_id("minecraft:enchantment", name);
-    let s = s.as_ref()?;
     let mut stack = Stack::new(item_id(&s.item), s.count as i32);
     if s.damage > 0 {
         stack.added.push((
@@ -1666,6 +1666,17 @@ fn network_stack(
         ));
     }
     if let Some(d) = s.data() {
+        let glint = "minecraft:enchantment_glint_override";
+        if d.other("!minecraft:enchantment_glint_override").is_some() {
+            stack
+                .removed
+                .push(horizon_protocol::item::component::ENCHANTMENT_GLINT_OVERRIDE);
+        } else if let Some(value) = d.other(glint).and_then(crate::item_data::component_bool) {
+            stack.added.push((
+                horizon_protocol::item::component::ENCHANTMENT_GLINT_OVERRIDE,
+                horizon_protocol::item::Component::Bool(value),
+            ));
+        }
         // TridentItem.use runs on both peers: each must see the stack's own durability limit.
         if let Some(horizon_core::nbt::Tag::Int(max)) = d.other("minecraft:max_damage") {
             stack.added.push((
@@ -1943,7 +1954,7 @@ fn network_stack(
             let charged = d
                 .charged
                 .iter()
-                .filter_map(|c| network_stack(item_id, synced_id, &Some(c.clone())))
+                .map(|c| network_stack(item_id, synced_id, c))
                 .collect();
             stack.added.push((
                 horizon_protocol::item::component::CHARGED_PROJECTILES,
@@ -1958,12 +1969,7 @@ fn network_stack(
             let slots: Vec<(i32, Stack)> = d
                 .container
                 .iter()
-                .filter_map(|(slot, s)| {
-                    Some((
-                        i32::from(*slot),
-                        network_stack(item_id, synced_id, &Some(s.clone()))?,
-                    ))
-                })
+                .map(|(slot, s)| (i32::from(*slot), network_stack(item_id, synced_id, s)))
                 .collect();
             // The saved list names only the filled slots; the codec counts them
             // all, from the first to the last that holds one.
@@ -1990,7 +1996,7 @@ fn network_stack(
             let contents = d
                 .bundle_contents
                 .iter()
-                .filter_map(|c| network_stack(item_id, synced_id, &Some(c.clone())))
+                .map(|c| network_stack(item_id, synced_id, c))
                 .collect();
             stack.added.push((
                 horizon_protocol::item::component::BUNDLE_CONTENTS,
@@ -2142,7 +2148,7 @@ fn network_stack(
             custom_model_data(t),
         ));
     }
-    Some(stack)
+    stack
 }
 
 /// `CustomModelData.CODEC` read from its saved form, for its stream codec.
