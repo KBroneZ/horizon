@@ -1,9 +1,8 @@
-use super::*;
 use crate::game::native_entity_refs::tests::{run_fresh_cases, with_client_game};
 use horizon_client::{
     advancements::{Progress, Tree},
     hud::{GuiScale, HudBatch},
-    lan::{advancements::ServerAdvancements, data::SyncData},
+    lan::{ServerAdvancements, data::SyncData},
 };
 use horizon_core::nbt::Tag;
 use horizon_protocol::{
