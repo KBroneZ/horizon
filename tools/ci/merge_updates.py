@@ -2,7 +2,7 @@
 """Posts a rollup or sync pull request, opened or merged, to the team's Discord channel.
 
 The workflow `merge-updates.yml` passes the pull request through the environment; the message
-is one embed with the title, the link and the body's `## Summary` section.
+is one embed with the state and title ("Merged: Rollup 62"), the link and the body's `## Summary` section.
 """
 import json
 import os
@@ -14,6 +14,8 @@ TITLE_LIMIT = 250
 DESCRIPTION_LIMIT = 3500
 COLOURS = {"opened": 0x3498DB, "merged": 0x2ECC71}
 HEADING = re.compile(r"^##\s")
+TABLE_ROW = re.compile(r"^\s*\|.*\|\s*$")
+TABLE_RULE = re.compile(r"^\s*\|[\s:|-]+\|\s*$")
 
 
 def summary(body):
@@ -29,7 +31,20 @@ def summary(body):
         if line.lstrip().startswith("> 🤖"):
             continue
         section.append(line)
-    return "\n".join(section).strip()
+    return "\n".join(plain_rows(section)).strip()
+
+
+def plain_rows(lines):
+    """Discord draws no tables: each table row becomes a list line ("- a · b"), and the header and rule rows go."""
+    out = []
+    for index, line in enumerate(lines):
+        if not TABLE_ROW.match(line):
+            out.append(line)
+        elif TABLE_RULE.match(line) or (index + 1 < len(lines) and TABLE_RULE.match(lines[index + 1])):
+            continue
+        else:
+            out.append("- " + " · ".join(cell.strip() for cell in line.strip().strip("|").split("|")))
+    return out
 
 
 def cut(text, limit):
@@ -46,8 +61,9 @@ def cut(text, limit):
 
 def payload(kind, state, title, url, body):
     """The webhook message: one embed, no pings."""
+    prefix = f"{state.capitalize()}: "
     embed = {
-        "title": cut(title, TITLE_LIMIT),
+        "title": prefix + cut(title, TITLE_LIMIT - len(prefix)),
         "url": url,
         "color": COLOURS[state],
         "footer": {"text": f"{kind.capitalize()} {state}"},
@@ -55,7 +71,8 @@ def payload(kind, state, title, url, body):
     text = summary(body)
     if text:
         embed["description"] = cut(text, DESCRIPTION_LIMIT)
-    return {"embeds": [embed], "allowed_mentions": {"parse": []}}
+    # 4096 is SUPPRESS_NOTIFICATIONS: a merge post never pushes or plays a sound, whatever a member's settings.
+    return {"embeds": [embed], "allowed_mentions": {"parse": []}, "flags": 4096}
 
 
 def main():

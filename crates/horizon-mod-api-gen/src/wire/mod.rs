@@ -5,6 +5,9 @@ mod append;
 mod borrowed;
 mod calls;
 mod host;
+mod prepared;
+#[cfg(test)]
+mod prepared_tests;
 pub use host::{generate_coverage, generate_host};
 mod trait_roles;
 mod ty;
@@ -37,6 +40,7 @@ pub(super) const IMPORTS: &[&str] = &[
     "Levels",
     "Messages",
     "Players",
+    "RuntimeLevels",
     "ClientSession",
     "RenderAssets",
     "InstanceGroups",
@@ -82,6 +86,7 @@ pub(super) const REACHED: &[(&str, &str, &str)] = &[
     ("Levels", "server_host", "Ok(h.levels())"),
     ("Messages", "server_host", "Ok(h.messages())"),
     ("Players", "server_host", "Ok(h.players())"),
+    ("RuntimeLevels", "server_host_mut", "Ok(h.runtime_levels())"),
     ("ClientSession", "client_host", "Ok(h.client_session())"),
     ("RenderAssets", "client_host", "Ok(h.render_assets())"),
     ("InstanceGroups", "client_host", "Ok(h.instance_groups())"),
@@ -327,6 +332,17 @@ pub(super) fn surface<'a>(
     root: &'a Path,
     included: &'a [(&'a str, &'a str)],
 ) -> Result<Surface<'a>, String> {
+    surface_reading(root, included, None)
+}
+
+/// [`surface`]; with `missing`, a listed boundary trait the tree does not have is pushed there
+/// instead of refusing the tree (the surface export reads older trees whose API predates a
+/// listed trait; the build never does).
+pub(super) fn surface_reading<'a>(
+    root: &'a Path,
+    included: &'a [(&'a str, &'a str)],
+    mut missing: Option<&mut Vec<String>>,
+) -> Result<Surface<'a>, String> {
     let mut types = Types::new(Index::new(root, included))?;
     let api = types.index.module("mod_api", &[])?;
     let (imported, mut exported, paths) = trait_roles::declared(root)?;
@@ -346,8 +362,14 @@ pub(super) fn surface<'a>(
     let hooks = hook_ids(&mut types)?;
     for owner in imports().iter().chain(exports()) {
         let (path, args) = owner_parts(owner)?;
-        let Found::Item(id) = types.index.resolve_path(api, &path)? else {
-            return Err(format!("{owner} is not a mod_api trait"));
+        let id = match (types.index.resolve_path(api, &path), missing.as_deref_mut()) {
+            (Ok(Found::Item(id)), _) => id,
+            (_, Some(missing)) => {
+                missing.push((*owner).to_owned());
+                continue;
+            }
+            (Err(error), None) => return Err(error),
+            (Ok(_), None) => return Err(format!("{owner} is not a mod_api trait")),
         };
         let Item::Trait(item) = types.index.item(id).clone() else {
             return Err(format!("{owner} is not a trait"));
@@ -426,7 +448,8 @@ pub(super) fn surface<'a>(
         .module("mod_api", &["wire".into(), "wire_types".into()])?;
     for owner in exports() {
         let (path, _) = owner_parts(owner)?;
-        let Found::Item(id) = types.index.resolve_path(api, &path)? else {
+        // Missing only where `missing` let the first pass skip it.
+        let Ok(Found::Item(id)) = types.index.resolve_path(api, &path) else {
             continue;
         };
         let Item::Trait(item) = types.index.item(id) else {
@@ -618,13 +641,31 @@ pub fn generate(root: &Path, included: &[(&str, &str)]) -> Result<Generated, Str
         &surface.parts,
     );
     guest.push_str(&calls::hook_names(&surface.hooks));
-    guest.push_str(&calls::dispatch(&surface.types, &surface.methods).0);
+    let prepared = crate::Catalog::load(root)?
+        .hooks
+        .into_iter()
+        .filter_map(|hook| hook.prepared.map(|field| (hook.name, field)))
+        .collect::<Vec<_>>();
+    guest.push_str(&calls::dispatch(&surface.types, &surface.methods, &prepared).0);
+    let abis = prepared::describe(&surface.methods, &prepared)?;
     let _ = writeln!(
         wire,
-        "#[doc(hidden)]\npub static WIRE_LAYOUT: ::std::sync::LazyLock<u64> = ::std::sync::LazyLock::new(|| {{ let mut hash = {:#x}; {layouts} hash }});",
+        "#[doc(hidden)]\npub fn wire_core_layout() -> u64 {{ let mut hash = {:#x}; {layouts} hash }}",
         layout(&surface),
         layouts = surface.types.defs.iter().filter(|def| def.lifetimes == 0).map(|def| format!("hash = crate::wire::layout_mix(hash, <{} as crate::wire::Wire>::layout(&mut vec![]));", def.rust.replace("mod_api::", "crate::"))).collect::<String>()
     );
+    writeln!(
+        wire,
+        "#[doc(hidden)] pub fn prepared_abi_layout() -> u64 {{ {} }}",
+        prepared::layout_code(&abis)
+    )
+    .unwrap();
+    let complete = if abis.is_empty() {
+        "wire_core_layout()"
+    } else {
+        "crate::wire::layout_mix(wire_core_layout(),prepared_abi_layout())"
+    };
+    writeln!(wire, "#[doc(hidden)] pub static WIRE_LAYOUT: ::std::sync::LazyLock<u64> = ::std::sync::LazyLock::new(|| {{ {complete} }});").unwrap();
     let sources = surface.types.index.read.take();
     Ok(Generated {
         wire,
@@ -799,7 +840,10 @@ fn public_path(index: &Index<'_>, path: &str) -> bool {
 }
 
 /// A hash of everything the two sides must agree on: every method's id and signature, and
-/// every type's shape (FNV-1a over their descriptions).
+/// every type's shape (FNV-1a over their descriptions). This is the core seed;
+/// `generate` appends owned Wire layouts and the prepared marker/entry ABI layouts
+/// to the final WIRE_LAYOUT. wire_core_layout also supports refusal diagnostics:
+/// a guest presenting it without the prepared component is refused, never accepted.
 fn layout(surface: &Surface<'_>) -> u64 {
     let mut hash = 0xcbf2_9ce4_8422_2325u64;
     let mut feed = |text: &str| {
@@ -835,6 +879,7 @@ mod tests {
     /// The generated impls depend on the hand-written `Wire` impls the generator skips, so an
     /// edit to that file must rerun the build script.
     #[test]
+    #[ignore = "daily"]
     fn enchantment_damage_registrar_and_callback_cross_to_wire() {
         std::thread::Builder::new()
             .stack_size(64 << 20)
@@ -872,6 +917,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "daily"]
     fn a_worldgen_part_method_crosses_and_waits_for_its_group_as_a_worker_call() {
         std::thread::Builder::new()
             .stack_size(64 << 20)
@@ -906,6 +952,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "daily"]
     fn the_hand_written_wire_impls_are_tracked_sources() {
         std::thread::Builder::new()
             .stack_size(64 << 20)
@@ -929,6 +976,7 @@ mod tests {
             .unwrap();
     }
     #[test]
+    #[ignore = "daily"]
     fn layout_includes_private_borrowed_shapes() {
         let run = || {
             let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -1004,6 +1052,7 @@ mod tests {
     /// The book renders the coverage page from the generator at build time; what the page
     /// promises is checked here, against the generator itself.
     #[test]
+    #[ignore = "daily"]
     fn coverage_page_is_well_formed() {
         std::thread::Builder::new()
             .stack_size(64 << 20)

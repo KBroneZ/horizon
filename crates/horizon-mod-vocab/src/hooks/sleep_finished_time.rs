@@ -22,10 +22,10 @@ pub trait Hooks {
     /// any other clock every `Marker`, vanilla's included, falls back to the
     /// morning. When even the morning is past `i64::MAX`, `new_time` is
     /// `current` and the clock stays. On the server, only when the `advance_time` rule is on;
-    /// `native_time_skip` then hears the jump to the resolved time and may
+    /// `time_skip` then hears the jump to the resolved time and may
     /// still cancel it. The players wake and the weather resets as usual
     /// either way. Set `canceled` and the clock is left where it is, as
-    /// NeoForge's cancel leaves it: `native_time_skip` is not asked either.
+    /// NeoForge's cancel leaves it: `time_skip` is not asked either.
     #[hook(
         side = "server",
         contract = "cancel",

@@ -26,7 +26,7 @@ class Summary(unittest.TestCase):
         self.assertEqual(mu.summary(None), "")
         message = mu.payload("sync", "merged", "Sync 34", "https://example/pr/9", "no heading")
         self.assertEqual(message["embeds"][0], {
-            "title": "Sync 34", "url": "https://example/pr/9", "color": 0x2ECC71,
+            "title": "Merged: Sync 34", "url": "https://example/pr/9", "color": 0x2ECC71,
             "footer": {"text": "Sync merged"},
         })
 
@@ -56,11 +56,23 @@ class Payload(unittest.TestCase):
                              "## Summary\n" + ("p" * 2000 + "\n\n") * 3)
         embed = message["embeds"][0]
         self.assertEqual(message["allowed_mentions"], {"parse": []})
+        self.assertEqual(message["flags"], 4096)
         self.assertEqual(embed["color"], 0x3498DB)
         self.assertEqual(embed["footer"], {"text": "Rollup opened"})
+        self.assertTrue(embed["title"].startswith("Opened: ttt"), embed["title"])
         self.assertLessEqual(len(embed["title"]), 250)
         self.assertLessEqual(len(embed["description"]), 3500)
         self.assertEqual(embed["description"], "p" * 2000 + "…")
+
+
+
+class TablesBecomeLists(unittest.TestCase):
+    def test_a_table_is_posted_as_list_lines_without_its_header(self):
+        body = "## Summary\nMembers:\n\n| PR | Author |\n| --- | :-: |\n| #1 | ann |\n| #2 | bo |\n\nAfter.\n"
+        self.assertEqual(mu.summary(body), "Members:\n\n- #1 · ann\n- #2 · bo\n\nAfter.")
+
+    def test_a_line_that_only_contains_a_bar_is_kept(self):
+        self.assertEqual(mu.summary("## Summary\na | b\n"), "a | b")
 
 
 if __name__ == "__main__":
