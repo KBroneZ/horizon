@@ -59,7 +59,10 @@ fn a_client_reads_the_entities_and_menu_the_server_shows_it() {
     .unwrap();
     {
         let _phase = mod_api::__private::PhaseOwner::scope(mod_api::__private::ModPhase::Setup);
-        assert_eq!(mod_api::ClientViewClientHost::local_item_use(&game), None);
+        assert_eq!(
+            mod_api::prelude::ClientViewClientHost::local_item_use(&game),
+            None
+        );
     }
     let (pipe, _server) = horizon_protocol::connection::Pipe::pair();
     game.connect_local(pipe, "Steve").unwrap();
