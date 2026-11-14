@@ -696,7 +696,7 @@ fn clone_selection_modes_match_pending_payloads() {
 }
 
 #[test]
-#[ignore = "requires prepared resources"]
+#[ignore = "daily"]
 fn random_selection_streams() {
     use horizon_client::random_sequences::RandomSequences;
     let root = std::path::PathBuf::from(std::env::var_os("HORIZON_TEST_RESOURCES").unwrap());
@@ -1108,7 +1108,7 @@ fn container_fill_preserves_explicit_zero_damage_on_custom_durable_item() {
 macro_rules! groups {
     ($($group:ident: [$($scenario:ident),+ $(,)?]),+ $(,)?) => {$(
         #[test]
-        #[ignore = "requires prepared resources"]
+        #[ignore = "daily"]
         fn $group() {
             if in_child(stringify!($group)) {
                 return;
