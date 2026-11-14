@@ -5,6 +5,7 @@
     "dockerfilePath": "crates/horizon-mod-registry/Dockerfile",
     "watchPatterns": [
       "/crates/**",
+      "/tools/layering/mod_vocab_state.json",
       "/Cargo.toml",
       "/.dockerignore"
     ]

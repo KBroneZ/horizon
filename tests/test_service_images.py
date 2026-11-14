@@ -43,6 +43,15 @@ def generator_reads() -> tuple[set[str], bool]:
     return named & all_crates(), dynamic
 
 
+def generator_files() -> set[str]:
+    """The repository files outside crates/ that the generator names by a literal path (`"tools/<...>"`) and that
+    exist: retired names the generator only checks are gone are not files."""
+    named = set()
+    for source in GENERATOR.rglob("*.rs"):
+        named |= set(re.findall(r'"(tools/[A-Za-z0-9_./-]+)"', source.read_text(encoding="utf-8")))
+    return {name for name in named if (ROOT / name).is_file()}
+
+
 def copies_every_crate(dockerfile: Path) -> bool:
     return re.search(r"^COPY crates crates\s*$", dockerfile.read_text(), re.MULTILINE) is not None
 
@@ -94,6 +103,20 @@ class ServiceImageTests(unittest.TestCase):
                 self.assertTrue(copies_every_crate(crate / "Dockerfile"), f"{service}/Dockerfile must COPY crates crates")
                 patterns = json.loads((crate / "railway.json").read_text())["build"]["watchPatterns"]
                 self.assertIn("/crates/**", patterns, f"{service}/railway.json must watch /crates/**")
+
+    def test_an_image_that_runs_the_generator_copies_and_watches_its_data_files(self):
+        # The build script fails when a file the generator reads outside crates/ is missing from the image.
+        files = generator_files()
+        self.assertIn("tools/layering/mod_vocab_state.json", files)
+        for service in SERVICES:
+            crate = ROOT / "crates" / service
+            if VOCAB not in path_packages(crate / "Cargo.lock"):
+                continue
+            with self.subTest(service=service):
+                copied = set(re.findall(r"^COPY (tools/\S+) \1\s*$", (crate / "Dockerfile").read_text(), re.MULTILINE))
+                self.assertEqual(sorted(files - copied), [], f"{service}/Dockerfile must COPY these files")
+                patterns = json.loads((crate / "railway.json").read_text())["build"]["watchPatterns"]
+                self.assertEqual(sorted(f for f in files if f"/{f}" not in patterns), [], f"{service}/railway.json")
 
     def test_railway_rebuilds_when_any_of_those_crates_changes(self):
         for service in SERVICES:
