@@ -103,16 +103,13 @@ pub(super) struct ModsState {
     pub(super) live_ids: std::collections::BTreeSet<String>,
     /// The server's data comes from a root a live switch built, not the one
     /// `res` was loaded from: the world tables are built from it even with no
-    /// data pack (`build_world_tables`).
+    /// data pack (`stage_world_tables`).
     pub(super) data_switched: bool,
     /// Structured load refusals, rendered only at the existing Mods-page boundary.
     pub(super) refused: Arc<Mutex<Vec<MissingJar>>>,
     /// The entries of the mods' datapack registries this world session has published, at the
     /// generation of the load or reload that built them; `None` when no mod declared one.
     pub(super) datapack_registries: Option<Arc<mod_api::DatapackRegistrySet>>,
-    /// The entries a table load decoded and checked, until its world open or reload takes them
-    /// to publish.
-    pub(super) datapack_candidate: Option<mod_api::DatapackCandidate>,
 }
 
 impl ModsState {
@@ -491,7 +488,9 @@ pub(super) fn register_select_item_model_properties(role: ExecutionRole) {
 /// animation files may name them.
 /// Block-state
 /// definition types (`native_register_block_state_models`), so blockstate files naming one get
-/// the models the mod picks.
+/// the models the mod picks; and special item model renderers
+/// (`native_register_special_model_renderer`), so special models of their types draw what the
+/// mod answers.
 pub(super) fn register_resource_sources(role: ExecutionRole) {
     if !role.is_client() {
         return;
@@ -514,6 +513,42 @@ pub(super) fn register_resource_sources(role: ExecutionRole) {
     let mut definitions = Vec::new();
     Game::native_register_block_state_models(&RegistrationContext::new(), &mut definitions);
     horizon_client_render::mod_block_state_models::register(definitions);
+    register_special_model_renderers();
+}
+/// The native mods' special item model renderers (`native_register_special_model_renderer`),
+/// kept once at start, before resources load: their types are what a `minecraft:special` model
+/// may name besides vanilla's, or in place of one. A later registration of a type replaces the
+/// earlier one, and the log names both mods.
+fn register_special_model_renderers() {
+    let mut registry = mod_api::SpecialModelRendererRegistry::default();
+    Game::native_register_special_model_renderer(&RegistrationContext::new(), &mut registry);
+    for (kind, owner) in registry.initial_owners() {
+        if horizon_assets::item_model::SpecialModel::is_builtin_type(kind) {
+            log::warn!(
+                "Horizon: special model type {kind} registered by the game is replaced by {}'s registration",
+                owner.unwrap_or("the game")
+            );
+        }
+    }
+    let (mut renderers, replaced) = registry.into_renderers();
+    for replaced in replaced {
+        let name = |id: Option<&str>| id.unwrap_or("the game").to_owned();
+        log::warn!(
+            "Horizon: special model type {} registered by {} is replaced by {}'s registration",
+            replaced.kind,
+            name(replaced.earlier),
+            name(replaced.later)
+        );
+    }
+    // In slot order: the types' models resolve to these slots as they decode.
+    let kept = horizon_assets::item_model::register_special_model_types(
+        renderers.keys().cloned().collect(),
+    );
+    super::native_special_renderers::register(
+        kept.into_iter()
+            .filter_map(|kind| renderers.remove(&kind).map(|renderer| (kind, renderer)))
+            .collect(),
+    );
 }
 /// The client presentation registrations, kept once at start, before resources load: the
 /// dimension transition screens, the entity spectator shaders, the render pipelines and the entity
@@ -1969,7 +2004,7 @@ mod tests {
         std::fs::create_dir_all(&cwd).unwrap();
         let status = std::process::Command::new(std::env::current_exe().unwrap())
             .current_dir(&cwd)
-            .args(["--exact", test, "--nocapture"])
+            .args(["--include-ignored", "--exact", test, "--nocapture"])
             .env(mode, "1")
             .status()
             .unwrap();
@@ -2675,6 +2710,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "daily"]
     fn content_overlay_validates_dependencies_and_orders_layers() {
         const MODE: &str = "HORIZON_CONTENT_DEPENDENCY_TEST";
         if std::env::var_os(MODE).is_none() {
@@ -2747,6 +2783,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "daily"]
     fn native_content_follows_the_build_and_misplaced_content_follows_its_selection() {
         const MODE: &str = "HORIZON_MODS_SELECTION_TEST";
         let mode = std::env::var(MODE).ok();
@@ -2755,7 +2792,7 @@ mod tests {
             for mode in ["compiled", "vanilla"] {
                 let status = std::process::Command::new(std::env::current_exe().unwrap())
                     .current_dir(std::env::temp_dir())
-                    .args(["--exact", "game::mods::tests::native_content_follows_the_build_and_misplaced_content_follows_its_selection", "--nocapture"])
+                    .args(["--include-ignored", "--exact", "game::mods::tests::native_content_follows_the_build_and_misplaced_content_follows_its_selection", "--nocapture"])
                     .env(MODE, mode).status().unwrap();
                 assert!(status.success());
             }
@@ -2814,6 +2851,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "daily"]
     fn a_shared_missing_jar_stops_native_load_and_refuses_each_content_mod_row() {
         const MODE: &str = "HORIZON_JAR_REFUSAL_TEST";
         if std::env::var_os(MODE).is_none() {

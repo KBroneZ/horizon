@@ -39,9 +39,12 @@ impl Fixture {
         let catalog = root.join(if modules {
             "module-catalog".to_owned()
         } else {
-            format!("target/horizon-mod/prebuilt/{}", "a".repeat(40))
+            format!(".horizon/cache/{}/build-data", "a".repeat(40))
         });
         fs::create_dir_all(&catalog).unwrap();
+        if !modules {
+            fs::write(catalog.parent().unwrap().join("build"), "a".repeat(40)).unwrap();
+        }
         let build = serde_json::json!({"commit": "a".repeat(40)});
         fs::write(catalog.join("internals.json"), serde_json::json!({"schema": 1, "build": build, "internals": [{
             "path": METHOD, "kind": "method", "signature": "impl PortedGame { fn tick(&mut self) -> u32 }", "hash": HASH,
@@ -62,6 +65,7 @@ impl Fixture {
             .args(args)
             .current_dir(&self.root)
             .env("HORIZON_LAUNCHER", &self.launcher)
+            .env("HORIZON_SDK_BASE", self.root.join("no-sdk"))
             .output()
             .unwrap();
         assert!(
@@ -89,6 +93,7 @@ impl Drop for Fixture {
 }
 
 #[test]
+#[ignore = "daily"]
 fn internals_add_uses_launcher_module_catalog_hash() {
     let fixture = Fixture::new(true);
     fixture.run(&["internals", "add", METHOD, "--kind", "method"]);
@@ -100,6 +105,7 @@ fn internals_add_uses_launcher_module_catalog_hash() {
 }
 
 #[test]
+#[ignore = "daily"]
 fn inject_add_head_uses_launcher_module_catalog_hash() {
     let fixture = Fixture::new(true);
     fixture.run(&[
@@ -113,6 +119,7 @@ fn inject_add_head_uses_launcher_module_catalog_hash() {
 }
 
 #[test]
+#[ignore = "daily"]
 fn module_free_add_commands_keep_prebuilt_output_and_never_run_launcher() {
     for args in [
         vec!["internals", "add", METHOD, "--kind", "method"],
