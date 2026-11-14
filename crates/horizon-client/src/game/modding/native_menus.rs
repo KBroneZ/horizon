@@ -704,8 +704,9 @@ mod tests {
                     other => format!("{other:?}"),
                 })
                 .collect();
-            // The inventory with the cursor stack back in it, the client's close of the old
-            // window for `CloseFirst` only, then the new menu's extra data, screen and contents.
+            // The client's close of the old window for `CloseFirst` only (queued before the
+            // removal, as `closeContainer` does), the inventory with the cursor stack back in
+            // it, then the new menu's extra data, screen and contents.
             let mut expected = vec![
                 "content 0 state 1 slots 46",
                 "payload horizon:menu_extra",
@@ -713,7 +714,7 @@ mod tests {
                 "content 2 state 1 slots 45",
             ];
             if replace == MenuReplace::CloseFirst {
-                expected.insert(1, "close 1");
+                expected.insert(0, "close 1");
             }
             assert_eq!(packets, expected);
             let g = &game.lan.as_ref().unwrap().hub.guests[0];
