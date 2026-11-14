@@ -672,7 +672,7 @@ mod tests {
     /// vanilla ones under their own display ids (a viewer's "+" reads them,
     /// `recipe_book_ids`), and a recipe only the server has gets one too.
     #[test]
-    #[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+    #[ignore = "daily"]
     fn synced_vanilla_recipes_keep_their_book_ids() {
         fn book_ids(game: &mut crate::game::Game<'_>, id: &str) -> Vec<i32> {
             (game.recipe_book_entries().into_iter())

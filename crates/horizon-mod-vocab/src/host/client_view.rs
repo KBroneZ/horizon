@@ -71,7 +71,7 @@ pub trait ClientViewClientHost {
     /// The local player's item use as the client sees it: the hand, ticks used and ticks left
     /// (`isUsingItem`, `getUsedItemHand`, `getTicksUsingItem`, `getUseItemRemainingTicks`).
     /// None when the player uses no item or no client world is open. Sends nothing.
-    #[access(WorldOnly)]
+    #[access(ClientSetup)]
     fn local_item_use(&self) -> Option<ItemUse>;
     /// Side: client.
     /// Turns the local player's view to `yaw` and `pitch` (degrees), as `setYRot` and `setXRot`

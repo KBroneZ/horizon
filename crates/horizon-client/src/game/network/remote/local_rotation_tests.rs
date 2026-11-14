@@ -36,7 +36,10 @@ fn finish_login(server: &mut Connection) {
 }
 
 /// The move packets the client sent before a fence, as (kind, yaw, pitch).
-fn sent_moves(game: &crate::game::Game<'_>, server: &mut Connection) -> Vec<(&'static str, f32, f32)> {
+fn sent_moves(
+    game: &crate::game::Game<'_>,
+    server: &mut Connection,
+) -> Vec<(&'static str, f32, f32)> {
     game.send(S::Punch(horizon_protocol::packets::Empty));
     let mut moves = Vec::new();
     loop {
@@ -53,7 +56,7 @@ fn sent_moves(game: &crate::game::Game<'_>, server: &mut Connection) -> Vec<(&'s
 }
 
 #[test]
-#[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+#[ignore = "daily"]
 fn a_mod_set_look_is_clamped_and_sent_once_by_the_tick() {
     mod_platform::testing::with_mods(Vec::new().into(), || {
         with_client_game(|game| {
@@ -77,7 +80,11 @@ fn a_mod_set_look_is_clamped_and_sent_once_by_the_tick() {
             assert_eq!(game.set_local_rotation(450.0, 120.0), Ok(()));
             assert_eq!((game.yaw, game.pitch), (450.0, 90.0));
             assert!(sent_moves(game, &mut server).is_empty());
-            for (yaw, pitch) in [(f32::NAN, 0.0), (0.0, f32::INFINITY), (f32::NEG_INFINITY, 0.0)] {
+            for (yaw, pitch) in [
+                (f32::NAN, 0.0),
+                (0.0, f32::INFINITY),
+                (f32::NEG_INFINITY, 0.0),
+            ] {
                 assert_eq!(
                     game.set_local_rotation(yaw, pitch),
                     Err(LocalRotationError::NotFinite)

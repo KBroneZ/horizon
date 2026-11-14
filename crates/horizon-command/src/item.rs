@@ -347,7 +347,7 @@ pub fn decode_component(id: &str, t: &Tag, reg: &Registries) -> Result<(), Strin
             if value.is_sign_negative() || !(0.0..=1.0).contains(&value) {
                 return Err(format!(
                     "Value must be within range [0.0;1.0]: {}",
-                    horizon_core::java_number::java_float(value)
+                    horizon_core::java_number::float_to_string(value)
                 ));
             }
             Ok(())

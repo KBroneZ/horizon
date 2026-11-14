@@ -26,7 +26,7 @@ fn spawn(dimension: &str) -> play::SpawnInfo {
 }
 
 #[test]
-#[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+#[ignore = "daily"]
 fn a_client_reads_the_entities_and_menu_the_server_shows_it() {
     let root = std::path::PathBuf::from(std::env::var_os("HORIZON_TEST_RESOURCES").unwrap());
     let settings = Settings::default();
@@ -57,6 +57,10 @@ fn a_client_reads_the_entities_and_menu_the_server_shows_it() {
         None,
     )
     .unwrap();
+    {
+        let _phase = mod_api::__private::PhaseOwner::scope(mod_api::__private::ModPhase::Setup);
+        assert_eq!(mod_api::ClientViewClientHost::local_item_use(&game), None);
+    }
     let (pipe, _server) = horizon_protocol::connection::Pipe::pair();
     game.connect_local(pipe, "Steve").unwrap();
     let builtin = game.remote.as_ref().unwrap().builtin.clone();
