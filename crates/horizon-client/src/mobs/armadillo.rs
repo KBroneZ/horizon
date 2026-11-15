@@ -8,8 +8,8 @@
 use super::{
     Damage, DamageKind, Mob, MobEvent, MobWorld, Species, Who,
     goals::{
-        Breed, Cx, Float, Goal, LOOK, LookAtPlayer, MOVE, Panic, RandomLookAround, Stroll, Tempt,
-        goal_clone,
+        AnimalPanic, Breed, Cx, Float, Goal, LOOK, LookAtPlayer, MOVE, RandomLookAround, Stroll,
+        Tempt, goal_clone,
     },
 };
 use horizon_core::{geometry::Vec3, random::RandomSource};
@@ -55,7 +55,7 @@ pub struct State {
 }
 
 pub fn register(m: &mut Mob) {
-    let mut panic = Panic::new(2.0);
+    let mut panic = AnimalPanic::new(2.0);
     panic.environmental = true;
     let g = &mut m.ai.goals;
     g.add(0, Float);
@@ -537,7 +537,7 @@ fn animate(m: &mut Mob) {
 
 /// `ArmadilloAi.ArmadilloPanic`: it unrolls, then runs.
 #[derive(Clone, Debug)]
-struct ArmadilloPanic(Panic);
+struct ArmadilloPanic(AnimalPanic);
 impl Goal for ArmadilloPanic {
     goal_clone!();
     fn flags(&self) -> u8 {
@@ -556,8 +556,14 @@ impl Goal for ArmadilloPanic {
         roll_out(m, cx.events);
         self.0.start(m, cx);
     }
+    fn tick(&mut self, m: &mut Mob, cx: &mut Cx) {
+        self.0.tick(m, cx);
+    }
     fn stop(&mut self, m: &mut Mob, cx: &mut Cx) {
         self.0.stop(m, cx);
+    }
+    fn every_tick(&self) -> bool {
+        self.0.every_tick()
     }
 }
 /// A behaviour of the IDLE activity: `ArmadilloAi.updateActivity` picks
@@ -719,7 +725,7 @@ mod tests {
     fn run_goals(m: &mut Mob, w: &MobWorld, ticks: u32) -> Vec<MobEvent> {
         let mut events = Vec::new();
         let mut goals = std::mem::take(&mut m.ai.goals);
-        let mut lr = horizon_core::random::LegacyRandom::new(0);
+        let mut lr = crate::mobs::world::level_random(0);
         let mut cx = Cx {
             w,
             lr: &mut lr,
@@ -859,7 +865,7 @@ mod tests {
         baby.extra.age = -24000;
         crate::mobs::world::with_test_world(&[], |w, _| {
             let mut events = Vec::new();
-            let mut lr = horizon_core::random::LegacyRandom::new(0);
+            let mut lr = crate::mobs::world::level_random(0);
             let mut cx = Cx {
                 w,
                 lr: &mut lr,
