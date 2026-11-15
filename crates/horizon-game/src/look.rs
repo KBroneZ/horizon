@@ -1,11 +1,21 @@
 //! The platform's look, given to the engine's extension point at startup (docs/layers.md): the colours,
 //! sizes and fonts of the menus vanilla doesn't have (`docs/design-system.md`). The window icon is
 //! branding, so the official executable gives it ([`crate::set_icon_png`]).
-use horizon_client::menu_style::{Fonts, MenuStyle, OverlayColours, SettingsColours, Sizes};
+use horizon_client::menu_style::{
+    Fonts, MenuStyle, OverlayColours, SettingsColours, Sizes, Surfaces,
+};
 use horizon_theme as theme;
+
+/// The switch for the menus' look: `vanilla` gives them none, so the settings pages, the HUD
+/// kit's tab strip and the overlays draw in the engine's `NEUTRAL` look, the settings pages on
+/// vanilla's own surfaces (`docs/ui-kit.md`, "Its look").
+const STYLE_VAR: &str = "HORIZON_MENU_STYLE";
 
 /// Give the engine Horizon's menu look; call it once, before the first window opens.
 pub(crate) fn give_menus() {
+    if std::env::var(STYLE_VAR).is_ok_and(|v| v.eq_ignore_ascii_case("vanilla")) {
+        return;
+    }
     let (blocks, dark) = (theme::BLOCKS_DARK, theme::DARK);
     horizon_client::menu_style::install(MenuStyle {
         settings: SettingsColours {
@@ -51,5 +61,6 @@ pub(crate) fn give_menus() {
             semibold: theme::fonts::GEIST_SEMIBOLD,
             mono: theme::fonts::GEIST_MONO,
         }),
+        surfaces: Surfaces::Flat,
     });
 }
