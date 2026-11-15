@@ -10,9 +10,12 @@ description = "The game as the platform runs it: the engine's entry with the pla
 # This repository's plain executable: the platform's game with no Horizon part (`cargo run -p
 # horizon-game`, the harnesses, horizon-ctl launch, horizon-plain, the server build). The official
 # executable is horizon-official's.
+# The binary holds no tests (the library does): `cargo test` builds no empty test harness for it, which linked the
+# whole game again. It still builds for integration tests (CARGO_BIN_EXE_*) and clippy --all-targets.
 [[bin]]
 name = "horizon-client"
 path = "src/main.rs"
+test = false
 
 [[test]]
 name = "launch_api"
