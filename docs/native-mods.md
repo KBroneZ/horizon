@@ -1251,7 +1251,7 @@ API 143 adds data maps (`RegisterDataMapTypesEvent`). `native_data_map_types(typ
 
 `native_living_drown(entity, kind, is_drowning, damage_amount, bubble_count, cancel)` asks on the server when a player or generic-air mob cannot breathe and has no air (NeoForge's `LivingDrownEvent`, `LivingEntity.baseTick`). Mods may change the drowning decision, damage and bubble count, or cancel. Damage at or below zero does not hurt. The normal eight bubbles use the entity event; other positive counts are sent in a particle packet, and nonpositive counts suppress bubbles. Bundles need "hooks": 356.
 
-API 144 adds a player's or mob's breathing, on the single player server thread and on a dedicated server: `native_living_breathe(entity, kind, can_breathe, consume, refill)` every tick for a player and for a mob with the generic air logic (NeoForge's `LivingBreatheEvent`, vanilla's `LivingEntity.baseTick`), with Horizon's answers as the defaults: set `can_breathe` and how much air `consume` takes or `refill` gives (up to 300); at -20 the entity is set to 0 air and takes 2 drowning damage. It is a free function in `horizon_client::breathing`, so it answers and cannot call helpers. Axolotls and `WaterAnimal`s keep their own air logic. Bundles that use it need "hooks": 144.
+API 144 adds a player's or mob's breathing, on the single player server thread and on a dedicated server: `native_living_breathe(entity, kind, can_breathe, consume, refill)` every tick for a player and for a mob with the generic air logic (NeoForge's `LivingBreatheEvent`, vanilla's `LivingEntity.baseTick`), with Horizon's answers as the defaults: set `can_breathe` and how much air `consume` takes or `refill` gives (up to 300, a dolphin's 4800); at -20 the entity is set to 0 air and takes 2 drowning damage. It is a free function in `horizon_client::breathing`, so it answers and cannot call helpers. Axolotls and `WaterAnimal`s keep their own air logic. Bundles that use it need "hooks": 144.
 
 API 145 adds blocks and items a native mod declares in code, as NeoForge's `DeferredRegister.Blocks` and `.Items` drained by `RegisterEvent`, instead of one content file each: `native_blocks(blocks)` and `native_items(items)`, asked once at start on every side, take `horizon_mods::content::Block` and `Item`, the declarations a content mod's `data/<id>/horizon/block/` and `item/` files hold (a vanilla template and what differs; `item: true` gives a block its item). Ids are in the mod's namespace. They join the content mods' blocks and items, inside the content mod whose id is that namespace when it is on (its models, textures, loot and recipes), else on their own with the template's look, so their network ids, saves and the joining client's content check are the files' (docs/mods.md). They pass the files' checks; a namespace whose declarations don't is logged and left out. Bundles that use them need `"hooks": 145`.
 
@@ -2305,6 +2305,8 @@ API 643 adds `host.has_line_of_sight(from_entity, to_entity)` is `LivingEntity.h
 API 644 adds `native_explosion_entities(dimension, center, entities)` (server) runs after `native_explosion_detonate`, before an explosion at `center` hurts and pushes anything: `entities` holds the ids of the entities in its reach (`ServerExplosion.hurtEntities`), players aside, which `native_living_incoming_damage` hears. Take out the ids to spare: they are neither hurt nor pushed. Bundles need "hooks": 644.
 
 API 645 adds `native_terrain_surface(dimension, columns)` returns the generator's surface height, top block, water surface and biome at up to 4,096 columns, loaded or not, without creating a chunk. Bundles need "hooks": 645.
+
+API 646 adds `native_camera_submersion(camera, fog_type)` runs when the camera's fluid submersion type is evaluated (`Camera.getFluidInCamera`), before fog and underwater screen overlays are prepared. Setting `fog_type` to `FogType::Atmospheric` clears underwater, lava and powder-snow fog and overlays (used e.g. by Freecam). Bundles need "hooks": 646.
 
 ## What the launcher does
 
@@ -3722,6 +3724,12 @@ injections before.
   are this viewer's client-side entities and leaves other ids alone. `native_reserve_entity_id()` is an id from the
   server's own counter for a mod's own packets. Outside a player's hook; None or false there, when the viewer isn't on,
   for an unknown type and for an id that isn't theirs. Bundles need `"hooks": 519`.
+- Helper **`native_client_entity_update(viewer, id, nbt) -> bool`** (`host.client_entity_update`): `native_client_entity_set`
+  for a few fields. It reads `nbt` as `set` does but sends only the data of the keys `nbt` has (`transformation` sends its
+  four parts), and nothing for the others, which keep the value the client has; a key whose value is the default is sent,
+  so a field can go back to it. A display's `start_interpolation` is sent with it, so a changed transformation eases over
+  `interpolation_duration`. `set` still sends every field. False when `id` isn't this viewer's client-side entity, when
+  the viewer isn't on and inside a player's hook. No hook is needed.
 - Helper **`native_set_list_name(uuid, name)`** (`host.set_list_name`): styled text (colours, a rank prefix) for that
   player in everyone's Tab list in place of their nickname or name, as Bukkit's `Player.setPlayerListName`; None shows
   the nickname or name again. Only the Tab list (chat keeps `native_set_display_name`'s or the nickname). It is sent at
@@ -4693,7 +4701,7 @@ goes in `native_server_tick`. A tick that errors ends without its `post`. Bundle
 ### Values for a mod's shader pack
 
 `native_shader_params(partial, params)` (client) asks every frame, while a Horizon shader pack is on, for eight
-`[f32; 4]` that every stage of the pack reads as `frame.mods` (`array<vec4<f32>, 8>`, docs/api/shaders-reference.md). What
+`[f32; 4]` that every stage of the pack reads as `frame.mods` (`array<vec4<f32>, 8>`, docs/api/shaders-reference-0.2.md). What
 they mean is the mod's own: a mod that bundles its pack as `native-<mod id>` writes the slots that pack reads, such as an
 explosion's centre (camera-relative, from `frame.camera_position`) and its age in seconds, for a cloud or a shock wave
 ray marched in a post pass against `scene_depth`. A value that isn't finite reads as 0, and all are 0 when no mod sets
