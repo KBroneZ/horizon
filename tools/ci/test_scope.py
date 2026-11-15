@@ -48,6 +48,8 @@ READERS = {
     "horizon-client-render": [
         "crates/horizon-client/assets/horizon/lang", "crates/horizon-client/assets/horizon/textures/gui",
     ],
+    # Its build script gives the executable its Windows icon and stack.
+    "horizon-game": ["packaging/windows/exe.rs"],
     "horizon-mod-api-gen": MOD_API_GEN,
     "horizon-mod-api-gen-tests": MOD_API_GEN,
     "horizon-official": ["packaging/windows/exe.rs"],
