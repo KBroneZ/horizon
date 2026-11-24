@@ -11,6 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+pub mod autotune;
 pub mod compare;
 mod hardware;
 
@@ -444,6 +445,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "daily"]
     fn round_trip_and_upload_strips_local_fields() {
         let mut r = Report::new(
             Kind::Game,
@@ -472,6 +474,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "daily"]
     fn rejects_other_formats_and_newer_versions() {
         let r = Report::new(Kind::Launcher, App::default());
         let newer = r.to_json().replace("\"version\": 1", "\"version\": 2");
@@ -481,6 +484,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "daily"]
     fn writes_into_a_folder() {
         let dir = std::env::temp_dir().join(format!("horizon-bench-test-{}", std::process::id()));
         let mut r = Report::new(Kind::Launcher, App::default());

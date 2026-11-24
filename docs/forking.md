@@ -9,13 +9,13 @@ Optimizations are not extras; they are part of the game in every build.
 ## Building without Horizon's extras
 
 ```sh
-cargo build --release -p horizon-client --no-default-features --features audio,controllers
+cargo build --release -p horizon-game --no-default-features --features audio,controllers
 ```
 
 Best effort: CI builds and tests the default only. The server build (`--no-default-features`,
 docs/server.md) compiles the same gates, so the code keeps compiling, but nobody plays it as a
 client before a release. [horizon-rust/horizon-plain](https://github.com/horizon-rust/horizon-plain)
-builds it from each official release tag, unsigned.
+builds it, unsigned, from the newest dated Nightly that is at least a week old.
 
 What changes in that build:
 
@@ -25,7 +25,7 @@ What changes in that build:
 | The official server added to the server list, the withdrawn partner server taken out; the "Start Horizon from the launcher" screen of a game without its prepared files, with its Download button (`get_the_game` hook) | crate `horizon-official-servers` | registered only by the official executable (`horizon-official`); horizon-client's own executable has none |
 | Horizon Settings (Extras, PvP & HUD, Splitscreen, Studio, AI Agent) and Mods (with the registry browser) | `options_ui.rs` (`Page::Horizon` and below), `extras_ui.rs`, `extras.rs`, `pvp.rs`, `game/extras.rs` and `game/extras/`, `extras_hud.rs` | the Options screen shows vanilla's greyed Telemetry Data instead (`options_ui::HORIZON_EXTRAS`, set in `entry.rs`) |
 | Discord Rich Presence and its switch | crate `horizon-discord` | registered only by the official executable (`horizon-official`); horizon-client's own executable has none |
-| Play with Friends | hosting: `game/friends.rs` (its page, drawn by `game/page_screen.rs`); joining: crate `horizon-friends` (`game`) | hosting: the `friends` feature (`game/friends_off.rs` stands in); joining: only the official executable registers it ([layers.md](layers.md#how-a-horizon-crate-plugs-in)) |
+| Play with Friends | hosting: `game/network/friends.rs` (its page, drawn by `game/interface/page_screen.rs`); joining: crate `horizon-friends` (`game`) | hosting: the `friends` feature (`game/network/friends_off.rs` stands in); joining: only the official executable registers it ([layers.md](layers.md#how-a-horizon-crate-plugs-in)) |
 | The anonymous "I'm playing" ping | crate `horizon-heartbeat` | not in horizon-client at all: only the official executable (`horizon-official`) registers it ([layers.md](layers.md#how-a-horizon-crate-plugs-in)) |
 
 Credits & Attribution then says where the official build is (`horizon.plain.official`).
@@ -59,7 +59,7 @@ only. They do not pass to forks, ports or derived launchers, whatever their lice
 - Its builds must not ship, embed, download or otherwise fetch Horizon's client ID, and must not tell
   players to set `HORIZON_MSA_CLIENT_ID` to it. Sign-ins made with it would appear to Microsoft and
   Mojang as Horizon's, which the project does not accept.
-- The MIT licence covers the code, not the app registration: copying the code gives no right to use
+- Horizon's licence ([GNU LGPL-3.0-or-later](../LICENSE), and [MIT](../LICENSES/MIT.txt) for earlier code) covers the code, not the app registration: copying the code gives no right to use
   Horizon's client ID.
 - Horizon may restrict, rotate or revoke its client ID at any time, which breaks every build that
   uses it, and reports misuse to Microsoft, Mojang and the hosting platform.

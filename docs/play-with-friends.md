@@ -26,7 +26,7 @@ that finds the port takes the session.
 ## How it works
 
 **Hosting.** The pause menu's Friends button (vanilla's icon, beside Player Reporting) opens **Play
-with Friends** (game/friends.rs's page at `Place::PauseFriends`, drawn by `game/page_screen.rs`); its **Start Sharing** opens the world to LAN if it isn't (Open to
+with Friends** (game/network/friends.rs's page at `Place::PauseFriends`, drawn by `game/interface/page_screen.rs`); its **Start Sharing** opens the world to LAN if it isn't (Open to
 LAN's defaults), then the host's game, on its own:
 
 1. listens on its **direct port**, TCP 25580 by default (the same port every time, so a port forwarded
@@ -59,7 +59,7 @@ host end connects to the world's LAN port over loopback, so tunnelled guests are
 game only through `horizon_hooks`: `Hooks::share` each client tick with a `share::ShareView` (open the world to
 LAN, its players, chat, the clipboard, a link), `Hooks::lan_closed`, its page (`pages::Place::PauseFriends`, what
 the pause menu's Friends icon opens; a press runs on the next tick) and `tr`. It keeps what it shares in its own
-statics. It still lives in horizon-client (`game/friends.rs`, the `friends` feature, which comes with
+statics. It still lives in horizon-client (`game/network/friends.rs`, the `friends` feature, which comes with
 `horizon-extras`) until `horizon-ctl` offers commands to crates above the engine (#14167).
 
 **Codes.** Crockford base32 (`0-9 A-Z` without `I L O U`; input ignores case, spaces and dashes and reads
@@ -112,8 +112,7 @@ run at once there, and each must finish within 10 seconds however slowly its byt
 - **A relay** (only if one is configured) sees the IP addresses of the host and the guests, the short
   code's first half, when sessions start and end and the size of encrypted frames. It can't see the
   secret, the key or the game (names, chat, the world). It logs counts every five minutes, nothing else.
-- **Horizon** runs no service for it. The game's anonymous "I'm playing" ping says only whether a
-  LAN or friends world is open, never its address, code or name ([telemetry.md](telemetry.md)).
+- **Horizon** runs no service for it, and the game sends nothing about it ([telemetry.md](telemetry.md)).
 
 ## Identity
 
@@ -180,6 +179,7 @@ message that names it):
 | `RELAY_MAX_HOSTS` | 1000 | short codes at once |
 | `RELAY_MAX_HOSTS_PER_ADDRESS` | 4 | short codes one client address holds at once (IPv6 by /64; a /48 holds 4 times as many); with `RELAY_PER_ADDRESS_LIMITS` |
 | `RELAY_MAX_OPEN_PER_ADDRESS` | 64 | connections of any kind one client address holds open at once (IPv6 by /64; a /48 holds 4 times as many); past it a connection is closed at once; with `RELAY_PER_ADDRESS_LIMITS` |
+| `RELAY_MAX_BRIDGES_PER_ADDRESS` | 32 | relayed streams one client address is an end of at once, as guest or as host (IPv6 by /64; a /48 holds 4 times as many); past it a guest is told the relay is full; with `RELAY_PER_ADDRESS_LIMITS` |
 | `RELAY_MAX_BRIDGES` | 200 | relayed streams at once |
 | `RELAY_MAX_PENDING_PER_HOST` | 8 | guests joining one host at the same time |
 | `RELAY_MAX_CONNECTIONS` | 4096 | connections open at once, of every kind (more are closed unanswered) |
