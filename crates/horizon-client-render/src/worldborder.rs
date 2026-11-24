@@ -7,6 +7,8 @@ pub use horizon_core::geometry::border::BorderStatus;
 
 /// `WorldBorder.MAX_SIZE` (the float 5.999997E7 as a double).
 pub const MAX_SIZE: f64 = 59_999_968.0;
+/// The farthest a border's centre may be on x or z (`/worldborder center`'s 2.9999984E7).
+pub const MAX_CENTER: f64 = 29_999_984.0;
 
 /// `BorderStatus.getColor`: the wall colour.
 pub fn status_color(status: BorderStatus) -> u32 {
@@ -172,8 +174,8 @@ impl WorldBorder {
             z.clamp(min_z + half, (max_z - half).max(min_z + half)),
         ]
     }
-    pub fn pack(&self) -> horizon_world::nbt::Tag {
-        use horizon_world::nbt::Tag;
+    pub fn pack(&self) -> horizon_core::nbt::Tag {
+        use horizon_core::nbt::Tag;
         Tag::compound([
             ("center_x", Tag::Double(self.center()[0].to_bits())),
             ("center_z", Tag::Double(self.center()[1].to_bits())),
@@ -189,8 +191,8 @@ impl WorldBorder {
             ("lerp_time", Tag::Long(self.remaining_ticks())),
         ])
     }
-    pub fn unpack(tag: &horizon_world::nbt::Tag) -> Self {
-        use horizon_world::nbt::Tag;
+    pub fn unpack(tag: &horizon_core::nbt::Tag) -> Self {
+        use horizon_core::nbt::Tag;
         let d = |k: &str, default: f64| match tag.get(k) {
             Some(Tag::Double(b)) => f64::from_bits(*b),
             _ => default,
@@ -216,6 +218,12 @@ impl WorldBorder {
             b.lerp_between(size, to.clamp(1.0, MAX_SIZE), *t);
         }
         b
+    }
+    /// Whether `pack` writes what a new border's `pack` writes. The absolute maximum size is not
+    /// in it: vanilla's `WorldBorder$Settings` has no such component, and a dedicated server sets
+    /// the limit again at each start (`MinecraftServer.createLevels`).
+    pub fn is_default_when_saved(&self) -> bool {
+        self.pack() == Self::default().pack()
     }
 }
 
@@ -262,5 +270,28 @@ mod tests {
         b.warning_distance = 9;
         let back = WorldBorder::unpack(&b.pack());
         assert_eq!(back, b);
+    }
+    /// A server's `max-world-size` is set at each start and never saved: a border that differs
+    /// from a new one only by that limit has nothing to write, but one that also has another
+    /// setting changed does.
+    #[test]
+    fn the_absolute_max_size_alone_is_nothing_to_save() {
+        let mut b = WorldBorder::default();
+        assert!(b.is_default_when_saved());
+        b.set_absolute_max_size(1000);
+        // `==` counts the limit, so `!= WorldBorder::default()` would say there is something to write.
+        assert_ne!(b, WorldBorder::default());
+        assert!(b.is_default_when_saved());
+        // Nothing of the limit is in the saved form: it reads back as the default one.
+        assert_eq!(
+            WorldBorder::unpack(&b.pack()).absolute_max_size(),
+            29_999_984
+        );
+        b.set_size(500.0);
+        assert!(!b.is_default_when_saved());
+        let mut other = WorldBorder::default();
+        other.set_absolute_max_size(1000);
+        other.warning_time = 10;
+        assert!(!other.is_default_when_saved());
     }
 }

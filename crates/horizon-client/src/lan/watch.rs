@@ -10,6 +10,19 @@
 use super::hub::{HostEvent, Hub, TickCtx};
 use crate::lan::prediction::Over;
 
+/// How the watch refused a claim of the ground ([`Watch::ground`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GroundRefusal {
+    /// Flagged and dropped.
+    Dropped,
+    /// Dropped without a flag: the same claim again, standing still where one was dropped. The move
+    /// counts toward vanilla's floating kick and the client is told the blocks under it, as for a
+    /// claim that stands.
+    Again,
+    /// Flagged, and the player kicked: the move is refused.
+    Kicked,
+}
+
 /// The anticheat's checks, called by the hub with itself (the watch taken out of it for the call).
 /// `i` is the guest's index in `hub.guests`.
 pub trait Watch: Send + Sync {
@@ -27,8 +40,7 @@ pub trait Watch: Send + Sync {
     /// ServerboundPunchPacket: the arm swung.
     fn swing(&mut self, hub: &mut Hub, i: usize);
     /// A move that says it ends on the ground at `to` (`stands`: something below stopped it): None
-    /// when the claim stands or isn't judged, else whether the move is refused (the player was
-    /// kicked); `Some(false)` drops the claim.
+    /// when the claim stands or isn't judged, else how it was refused.
     #[allow(clippy::too_many_arguments)]
     fn ground(
         &mut self,
@@ -38,7 +50,7 @@ pub trait Watch: Send + Sync {
         stands: bool,
         ctx: &TickCtx,
         events: &mut Vec<HostEvent>,
-    ) -> Option<bool>;
+    ) -> Option<GroundRefusal>;
     /// The replay found guest `conn`'s ticks that landed off by more than [`Watch::tolerance`]; a
     /// setback sends the player to `agreed`, where its moves last agreed. What to log.
     fn prediction(
@@ -77,9 +89,10 @@ impl Hub {
             return;
         }
         if self.recording() {
-            let g = &mut self.guests[i];
-            let (input, sprinting) = (g.input, g.client_sprinting);
-            g.record.get_or_insert_default().tick_end(input, sprinting);
+            self.guests.update(i, |g| {
+                let (input, sprinting) = (g.input, g.client_sprinting);
+                g.record.get_or_insert_default().tick_end(input, sprinting);
+            });
         }
         self.watch((), |w, hub| w.tick_end(hub, i, events));
     }
@@ -107,7 +120,7 @@ impl Hub {
         stands: bool,
         ctx: &TickCtx,
         events: &mut Vec<HostEvent>,
-    ) -> Option<bool> {
+    ) -> Option<GroundRefusal> {
         self.watch(None, |w, hub| w.ground(hub, i, to, stands, ctx, events))
     }
 
@@ -130,12 +143,12 @@ impl Hub {
 
     /// Disconnects `conn` for the anticheat.
     pub fn anticheat_kick(&mut self, conn: u32) {
-        let reason = horizon_world::nbt::Tag::compound([
+        let reason = horizon_core::nbt::Tag::compound([
             (
                 "text",
-                horizon_world::nbt::Tag::String("Kicked by the server's anticheat".into()),
+                horizon_core::nbt::Tag::String("Kicked by the server's anticheat".into()),
             ),
-            ("color", horizon_world::nbt::Tag::String("white".into())),
+            ("color", horizon_core::nbt::Tag::String("white".into())),
         ]);
         self.kick(conn, reason);
     }

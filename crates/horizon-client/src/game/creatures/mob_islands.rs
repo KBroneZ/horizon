@@ -35,7 +35,7 @@ use horizon_client::{
 };
 use horizon_core::{
     geometry::{Aabb, Axis},
-    random::OrderedDraws,
+    random::{LevelRandom, OrderedDraws},
 };
 use std::{
     cell::Cell,
@@ -118,20 +118,10 @@ fn lanes() -> usize {
     capped_lanes(horizon_client::parallel::lanes(), hardware)
 }
 
-/// Whether a native mod can run in a mob's turn, as the build found it (`HORIZON_MOB_TURN`, from
-/// `horizon_mod_api_gen::mob_turn`): then the loop stays serial. Without that finding, any trait
-/// mod counts.
+/// Whether a native mod can run in a mob's turn: the typed hook modules currently have no
+/// deferred-hook replay route, so any loaded native mod keeps the mob loop serial.
 fn mods_hook_turns() -> bool {
-    match option_env!("HORIZON_MOB_TURN") {
-        Some(found) => found == "hooked",
-        None => !horizon_client::mod_api::mods().is_empty(),
-    }
-}
-
-/// Whether native mods are loaded at all: grouped turns keep the hooks that hand nothing back
-/// for the join, and skip the others (no mod hooks them while the islands run).
-fn defers() -> bool {
-    !horizon_client::mod_api::mods().is_empty()
+    option_env!("HORIZON_MOB_TURN") == Some("hooked") || !mod_api::__private::mods().is_empty()
 }
 
 /// The mobs of each group, by their place in the list, ascending.
@@ -157,23 +147,30 @@ impl Islands<'_> {
         start: &Start,
     ) -> Option<Plan> {
         let lanes = lanes();
-        if lanes < 2
-            || mods_hook_turns()
-            || mobs.len() < MIN_TICKING
-            || horizon_client::random_source::repeating_per_thread()
-        {
+        let early = if lanes < 2 {
+            Some(Verdict::OneLane)
+        } else if mods_hook_turns() {
+            Some(Verdict::ModsHookTurns)
+        } else if mobs.len() < MIN_TICKING {
+            Some(Verdict::FewMobs)
+        } else if horizon_client::random_source::repeating_per_thread() {
+            Some(Verdict::RepeatingSeeds)
+        } else {
+            None
+        };
+        if let Some(verdict) = early {
+            verdict.record(&Census::default());
             return None;
         }
         // A content mod's effect ticks through the native mods (`ModEffectTicks`), which run
         // only on the server thread.
-        if defers()
-            && mobs.iter().any(|m| {
-                m.extra
-                    .effects
-                    .iter()
-                    .any(|e| horizon_client_core::potions::is_mod_effect(e.0))
-            })
-        {
+        if mobs.iter().any(|m| {
+            m.extra
+                .effects
+                .iter()
+                .any(|e| horizon_client_core::potions::is_mod_effect(e.id))
+        }) {
+            Verdict::ModEffect.record(&Census::default());
             return None;
         }
         // Where an owner stands: the players a pet can see this tick.
@@ -184,7 +181,26 @@ impl Islands<'_> {
             .map(|p| (p.uuid, p.position))
             .collect();
         horizon_client::spans::time("islands_plan", || {
-            islands(&reaches(mobs, snapshot, turns, &players)?, lanes)
+            let list = match reaches_why(mobs, snapshot, turns, &players) {
+                Ok(list) => list,
+                Err(bad) => {
+                    bad.verdict.record(&Census::default());
+                    bad.log();
+                    return None;
+                }
+            };
+            let mut census = Census::default();
+            let plan = islands_why(&list, lanes, &mut census);
+            match plan {
+                Ok(plan) => {
+                    Verdict::Grouped.record(&census);
+                    Some(plan)
+                }
+                Err(verdict) => {
+                    verdict.record(&census);
+                    None
+                }
+            }
         })
     }
 
@@ -235,7 +251,7 @@ impl Islands<'_> {
                     .collect();
                 let group_start = Start {
                     events: Vec::new(),
-                    random: draws.lane(lane),
+                    random: LevelRandom::for_level(draws.lane(lane)),
                     guests: start.guests.clone(),
                     player: start.player.clone(),
                     bindings,
@@ -284,9 +300,7 @@ impl Islands<'_> {
             guest_events.extend(g.guest_events[from[4]..to[4]].iter().cloned());
         }
         let mut pushes = horizon_client::mobs::PendingPushes::default();
-        let mut deferred = Vec::new();
         for g in &mut groups {
-            deferred.append(&mut g.deferred);
             // Each member's binding and death mark as its group left them.
             for m in g.mobs.iter().map(MobSlot::mob) {
                 match g.bindings.get(&m.id) {
@@ -308,17 +322,12 @@ impl Islands<'_> {
             }
         }
         drop(groups);
-        // The mods hear the kept hooks as the serial loop told them: by turn, each turn's in order.
-        deferred.sort_by_key(|d| d.0);
-        for (_, d) in deferred {
-            horizon_client::native_client_hooks::replay(d);
-        }
         let Board { frozen, .. } = board;
         let mut merged = Group::new(
             mobs,
             Vec::new(),
             Start {
-                random: draws.finish(),
+                random: LevelRandom::for_level(draws.finish()),
                 targets,
                 ..start
             },
@@ -355,22 +364,18 @@ impl Islands<'_> {
         let (nearest, single_player, difficulty) =
             (turns.nearest, turns.single_player, turns.difficulty);
         let lookup = LoopLookup(self.uuid);
-        let (defers, canceled) = (defers(), turns.canceled);
+        let canceled = turns.canceled;
         let sampling = super::super::tick_profile::sampling();
         let run = |g: &mut Group<&mut Mob>, ticking: Box<dyn Fn(i32, i32) -> bool + Send>| {
             let foreign = Foreign {
                 board,
                 reader: Cell::new(0),
-                defers,
             };
             let mut base = rebuild();
             base.who_lookup = Some(&lookup);
-            // The despawn checks look up no mob, as the serial loop's.
-            let despawn = base.despawn_view();
             base.foreign = Some(&foreign);
             let mut turns = Turns {
                 base: &base,
-                despawn,
                 ticking: &*ticking,
                 nearest,
                 single_player,
@@ -510,10 +515,11 @@ fn jump(species: Species) -> f64 {
 /// lands within half of it on each axis, then drops to the ground. None when it holds none; a
 /// diameter that isn't finite is returned as it is, and keeps the tick serial.
 fn teleport_consumable(m: &Mob, items: &horizon_client::items::Items) -> Option<f64> {
-    [&m.extra.main_hand, &m.extra.off_hand]
+    use horizon_items::equipment::{MAINHAND, OFFHAND};
+    [MAINHAND, OFFHAND]
         .into_iter()
-        .flatten()
-        .filter_map(|id| items.items.get(&**id)?.consumable.as_ref())
+        .filter_map(|slot| m.extra.slot_stack(slot))
+        .filter_map(|stack| stack.consumable(items.items.get(&stack.item)))
         .flat_map(|c| &c.effects)
         .filter_map(|e| match e {
             horizon_client::items::ConsumeEffect::TeleportRandomly(t) => {
@@ -566,9 +572,9 @@ fn default_locomotion(m: &Mob) -> bool {
         && m.movement_speed() == m.kind.speed
         && m.attrs.jump_strength == m.kind.jump_strength
         && value(m, Attr::FlyingSpeed) == m.kind.flying_speed
-        && !m.extra.effects.iter().any(|(effect, ..)| {
+        && !m.extra.effects.iter().any(|e| {
             matches!(
-                *effect,
+                e.id,
                 "minecraft:speed"
                     | "minecraft:slowness"
                     | "minecraft:jump_boost"
@@ -589,12 +595,7 @@ fn locomotion(m: &Mob) -> Option<f64> {
     if default_locomotion(m) {
         return Some(0.0);
     }
-    let effects = || {
-        m.extra
-            .effects
-            .iter()
-            .map(|&(effect, _, amp)| (effect, amp))
-    };
+    let effects = || m.extra.effects.iter().map(|e| (e.id, e.amplifier));
     // Speed: +20% a level (an amplifier below 0 slows, and is left out).
     let swift = effects()
         .filter(|e| e.0 == "minecraft:speed")
@@ -689,21 +690,85 @@ fn warden_links(m: &Mob, links: &mut Vec<u32>) {
 /// Each mob's reach; None when a value is not finite or the lists don't match. Changes to movement,
 /// reads or cross-mob writes require a conservative reach and a behavioral regression; verify is
 /// no safety net. `owners`: each player a mob can see this tick, by UUID, where it stands.
+#[cfg(test)]
 fn reaches(
     mobs: &[Mob],
     snapshot: &[Seen],
     turns: &Turns,
     owners: &[([i32; 4], Vec3)],
 ) -> Option<Vec<Reach>> {
+    reaches_why(mobs, snapshot, turns, owners).ok()
+}
+
+/// The mob whose reach has no finite bound, and which bound: one such mob keeps every mob of the
+/// level serial, so a capture names it (the `mob_islands.ticks` verdict, and a log line).
+struct Unbounded {
+    verdict: Verdict,
+    /// The mob's id, species and where it is, or nothing for the lists' lengths.
+    mob: Option<(u32, String, Vec3, Vec3)>,
+}
+
+impl Unbounded {
+    fn of(verdict: Verdict, m: &Mob, id: u32) -> Self {
+        Self {
+            verdict,
+            mob: Some((id, format!("{:?}", m.species()), m.position, m.velocity)),
+        }
+    }
+
+    /// Logs the mob, at most once a minute.
+    fn log(&self) {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static LAST: AtomicU64 = AtomicU64::new(0);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        let last = LAST.load(Ordering::Relaxed);
+        if now < last.saturating_add(60)
+            || LAST
+                .compare_exchange(last, now, Ordering::Relaxed, Ordering::Relaxed)
+                .is_err()
+        {
+            return;
+        }
+        match &self.mob {
+            Some((id, species, at, v)) => log::warn!(
+                "mob islands: mob {id} ({species}) at ({:.1}, {:.1}, {:.1}) with velocity \
+                 ({:.3}, {:.3}, {:.3}) keeps every mob of the level serial: {}",
+                at.x,
+                at.y,
+                at.z,
+                v.x,
+                v.y,
+                v.z,
+                self.verdict.label()
+            ),
+            None => log::warn!(
+                "mob islands: the mobs and their snapshot differ in length, so the tick runs serially"
+            ),
+        }
+    }
+}
+
+/// [`reaches`], with the mob and the bound that kept it from being one.
+fn reaches_why(
+    mobs: &[Mob],
+    snapshot: &[Seen],
+    turns: &Turns,
+    owners: &[([i32; 4], Vec3)],
+) -> std::result::Result<Vec<Reach>, Unbounded> {
     if mobs.len() != snapshot.len() {
-        return None;
+        return Err(Unbounded {
+            verdict: Verdict::UnboundedLists,
+            mob: None,
+        });
     }
     let mut out = Vec::with_capacity(mobs.len());
     for (m, s) in mobs.iter().zip(snapshot) {
         if !(m.position.x.is_finite() && m.position.y.is_finite() && m.position.z.is_finite())
             || !(m.velocity.x.is_finite() && m.velocity.y.is_finite() && m.velocity.z.is_finite())
         {
-            return None;
+            return Err(Unbounded::of(Verdict::UnboundedState, m, s.id));
         }
         let (bx, bz) = (m.position.x.floor() as i32, m.position.z.floor() as i32);
         let v = m.velocity;
@@ -713,14 +778,16 @@ fn reaches(
             .items
             .and_then(|items| teleport_consumable(m, items))
         {
-            Some(d) if !d.is_finite() => return None,
+            Some(d) if !d.is_finite() => {
+                return Err(Unbounded::of(Verdict::UnboundedMeal, m, s.id));
+            }
             Some(d) => Some(d / 2.0 + 1.0),
             None => None,
         };
         let motion = 2.0 * (v.x * v.x + v.y * v.y + v.z * v.z).sqrt()
             + jump(s.species)
             + meal.unwrap_or(0.0)
-            + locomotion(m)?
+            + locomotion(m).ok_or_else(|| Unbounded::of(Verdict::UnboundedLocomotion, m, s.id))?
             + SLACK;
         let mut body = grow(s.bounds, motion);
         // ...then the drop to the ground below the landing, as deep as the world goes.
@@ -803,7 +870,7 @@ fn reaches(
             away,
         });
     }
-    Some(out)
+    Ok(out)
 }
 
 /// Union-find over the mobs' places.
@@ -879,10 +946,107 @@ impl Cells {
 /// The islands of `reaches`, packed into at most `lanes` groups; None when the loop should run
 /// serially: too few ticking mobs, a plan past its budget, one island holding most of the ticking
 /// mobs, or only one group.
+#[cfg(test)]
 fn islands(reaches: &[Reach], lanes: usize) -> Option<Plan> {
+    islands_why(reaches, lanes, &mut Census::default()).ok()
+}
+
+/// Why a tick's mobs run in groups or serially, as the `mob_islands.ticks` counter's `verdict`
+/// label: one count per tick, so a capture shows which rule keeps a server's mob loop on one
+/// thread.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Verdict {
+    /// The mobs ran in groups.
+    Grouped,
+    /// One lane (a machine or `HORIZON_WORKER_THREADS` with fewer than two threads).
+    OneLane,
+    /// A native mod can run code in a mob's turn (`HORIZON_MOB_TURN`).
+    ModsHookTurns,
+    /// Fewer than `MIN_TICKING` mobs in the loop.
+    FewMobs,
+    /// `HORIZON_TEST_SEEDS`.
+    RepeatingSeeds,
+    /// A mob carries a content mod's effect while mods are loaded.
+    ModEffect,
+    /// The mob and snapshot lists differ in length.
+    UnboundedLists,
+    /// A mob's position or velocity is not finite: that one mob keeps every mob serial.
+    UnboundedState,
+    /// A teleporting meal's diameter is not finite.
+    UnboundedMeal,
+    /// A mob's locomotion bound is not finite (`locomotion`).
+    UnboundedLocomotion,
+    /// Fewer than `MIN_TICKING` of the mobs tick.
+    FewTicking,
+    /// The plan used up its cell visits.
+    OverBudget,
+    /// One island holds more than three quarters of the ticking mobs.
+    OneIsland,
+    /// The islands fit in one group.
+    OneGroup,
+}
+
+impl Verdict {
+    fn label(self) -> &'static str {
+        match self {
+            Verdict::Grouped => "grouped",
+            Verdict::OneLane => "one_lane",
+            Verdict::ModsHookTurns => "mods_hook_turns",
+            Verdict::FewMobs => "few_mobs",
+            Verdict::RepeatingSeeds => "repeating_seeds",
+            Verdict::ModEffect => "mod_effect",
+            Verdict::UnboundedLists => "unbounded_lists",
+            Verdict::UnboundedState => "unbounded_state",
+            Verdict::UnboundedMeal => "unbounded_meal",
+            Verdict::UnboundedLocomotion => "unbounded_locomotion",
+            Verdict::FewTicking => "few_ticking",
+            Verdict::OverBudget => "over_budget",
+            Verdict::OneIsland => "one_island",
+            Verdict::OneGroup => "one_group",
+        }
+    }
+
+    /// Counts the tick under its verdict, and sets the gauges of what the plan found when it got
+    /// that far. Nothing is read while the profiler is off.
+    fn record(self, census: &Census) {
+        if !horizon_client::spans::enabled() {
+            return;
+        }
+        horizon_perf_format::counter("mob_islands.ticks", &[("verdict", self.label())]).add(1);
+        if census.ticking > 0 {
+            for (name, value) in [
+                ("mob_islands.ticking", census.ticking),
+                ("mob_islands.islands", census.islands),
+                ("mob_islands.largest_island", census.largest),
+            ] {
+                horizon_perf_format::gauge(name, &[]).set(value as f64);
+            }
+        }
+    }
+}
+
+/// What a plan found among a tick's mobs: how many tick, how many islands they form, and how many
+/// the largest holds. Zero until the plan got that far.
+#[derive(Default)]
+struct Census {
+    ticking: usize,
+    islands: usize,
+    largest: usize,
+}
+
+/// [`islands`], with the reason a tick runs serially.
+fn islands_why(
+    reaches: &[Reach],
+    lanes: usize,
+    census: &mut Census,
+) -> std::result::Result<Plan, Verdict> {
     let ticking = reaches.iter().filter(|r| r.ticking).count();
-    if lanes < 2 || ticking < MIN_TICKING {
-        return None;
+    census.ticking = ticking;
+    if lanes < 2 {
+        return Err(Verdict::OneLane);
+    }
+    if ticking < MIN_TICKING {
+        return Err(Verdict::FewTicking);
     }
     let n = reaches.len();
     let mut budget = PLAN_BUDGET;
@@ -942,25 +1106,33 @@ fn islands(reaches: &[Reach], lanes: usize) -> Option<Plan> {
     // Columns by the cells their boxes cover.
     let (mut bodies, mut claims) = (Cells::default(), Cells::default());
     for (c, col) in columns.iter().enumerate() {
-        bodies.insert(c as u32, col.body, &mut budget)?;
+        bodies
+            .insert(c as u32, col.body, &mut budget)
+            .ok_or(Verdict::OverBudget)?;
         if let Some(b) = col.claims {
-            claims.insert(c as u32, b, &mut budget)?;
+            claims
+                .insert(c as u32, b, &mut budget)
+                .ok_or(Verdict::OverBudget)?;
         }
     }
     for col in &columns {
-        bodies.query(col.sense, &mut budget, |j| {
-            let other = &columns[j as usize];
-            if other.body.intersects(col.sense) {
-                sets.join(col.first, other.first);
-            }
-        })?;
-        if let Some(reads) = col.village_reads {
-            claims.query(reads, &mut budget, |j| {
+        bodies
+            .query(col.sense, &mut budget, |j| {
                 let other = &columns[j as usize];
-                if other.claims.is_some_and(|b| b.intersects(reads)) {
+                if other.body.intersects(col.sense) {
                     sets.join(col.first, other.first);
                 }
-            })?;
+            })
+            .ok_or(Verdict::OverBudget)?;
+        if let Some(reads) = col.village_reads {
+            claims
+                .query(reads, &mut budget, |j| {
+                    let other = &columns[j as usize];
+                    if other.claims.is_some_and(|b| b.intersects(reads)) {
+                        sets.join(col.first, other.first);
+                    }
+                })
+                .ok_or(Verdict::OverBudget)?;
         }
     }
     let mut raids = FxHashMap::<i32, u32>::default();
@@ -988,14 +1160,18 @@ fn islands(reaches: &[Reach], lanes: usize) -> Option<Plan> {
         islands[k].0 += usize::from(r.ticking);
     }
     let largest = islands.iter().map(|i| i.0).max().unwrap_or(0);
+    (census.islands, census.largest) = (islands.len(), largest);
     if largest * 4 > ticking * 3 {
-        return None;
+        return Err(Verdict::OneIsland);
     }
     // Heaviest first (stable: ties keep the list's order), each to the lightest group.
     islands.sort_by_key(|a| std::cmp::Reverse(a.0));
     let mut groups: Vec<(usize, Vec<usize>)> = vec![(0, Vec::new()); lanes];
     for (weight, members) in islands {
-        let g = groups.iter_mut().min_by_key(|g| g.0)?;
+        let g = groups
+            .iter_mut()
+            .min_by_key(|g| g.0)
+            .ok_or(Verdict::OneGroup)?;
         g.0 += weight;
         g.1.extend(members);
     }
@@ -1007,7 +1183,11 @@ fn islands(reaches: &[Reach], lanes: usize) -> Option<Plan> {
     for g in &mut groups {
         g.sort_unstable();
     }
-    (groups.len() > 1).then_some(Plan { groups })
+    if groups.len() > 1 {
+        Ok(Plan { groups })
+    } else {
+        Err(Verdict::OneGroup)
+    }
 }
 
 /// Every mob's snapshot entry across the groups, for a lookup by id of a mob in another group:
@@ -1052,8 +1232,6 @@ impl Board {
 pub(super) struct Foreign<'b> {
     board: &'b Board,
     pub reader: Cell<usize>,
-    /// Whether the turns keep their mod hooks for the join ([`defers`]).
-    pub defers: bool,
 }
 impl Foreign<'_> {
     /// A turn's new RNGs, including projectile RNGs and long-jump angle shuffles, follow list
@@ -1238,7 +1416,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+    #[ignore = "needs the upstream-parallel-mobs feature and prepared resources"]
     fn startup_and_turn_failures_release_lanes_and_preserve_payload() {
         let (sent, finished) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
@@ -1252,17 +1430,16 @@ mod tests {
             ] {
                 let mut game = super::super::super::native_machines::tests::server_game();
                 for x in [0.5, 1.5, 2.5] {
-                    game.spawn_mob("minecraft:cow", [x, 65.0, 0.5], true)
+                    game.spawn_mob("minecraft:cow", [x, 65.0, 0.5], true, SpawnSite::Plain)
                         .unwrap();
                 }
-                let mobs: Vec<Mob> = std::mem::take(&mut game.mobs).into();
-                let snapshot = mobs.iter().map(|m| m.seen(None)).collect();
+                let mobs: Vec<Mob> = std::mem::take(&mut game.mobs).to_vec();
+                let snapshot = mobs.iter().map(|m| m.seen(None, game.items())).collect();
                 let base = game.mob_world_base(&[]);
                 let players = super::super::super::natural_spawning::NearestPlayers::new(&[]);
                 let nearest = super::super::prep::MobsNearest::new(&players, &mobs, false);
                 let mut turns = Turns {
                     base: &base,
-                    despawn: base.despawn_view(),
                     ticking: &|_, _| true,
                     nearest: &nearest,
                     single_player: Some(None),
@@ -1274,7 +1451,7 @@ mod tests {
                 };
                 let start = Start {
                     events: Vec::new(),
-                    random: horizon_core::random::LegacyRandom::new(7),
+                    random: LevelRandom::for_level(horizon_core::random::LegacyRandom::new(7)),
                     guests: Vec::new(),
                     player: None,
                     bindings: Default::default(),
@@ -1330,15 +1507,18 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+    #[ignore = "needs the upstream-parallel-mobs feature and prepared resources"]
     fn verification_detects_snapshot_and_gaussian_only_differences() {
         use horizon_core::random::RandomSource;
         let mut game = super::super::super::native_machines::tests::server_game();
-        game.spawn_mob("minecraft:cow", [0.5, 65.0, 0.5], true)
+        game.spawn_mob("minecraft:cow", [0.5, 65.0, 0.5], true, SpawnSite::Plain)
             .unwrap();
         let mobs = game.mobs.to_vec();
-        let snapshot = mobs.iter().map(|m| m.seen(None)).collect::<Vec<_>>();
-        let mut random = horizon_core::random::LegacyRandom::new(7);
+        let snapshot = mobs
+            .iter()
+            .map(|m| m.seen(None, game.items()))
+            .collect::<Vec<_>>();
+        let mut random = LevelRandom::for_level(horizon_core::random::LegacyRandom::new(7));
         random.next_gaussian();
         let start = Start {
             events: Vec::new(),
@@ -1484,10 +1664,10 @@ mod tests {
 
     /// Exercise the actual Mob/Seen-to-reach conversion, not just hand-built planner boxes.
     #[test]
-    #[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+    #[ignore = "needs the upstream-parallel-mobs feature and prepared resources"]
     fn actual_reaches_cover_links_villages_and_bounded_moves() {
         let mut game = super::super::super::native_machines::tests::server_game();
-        game.spawn_mob("minecraft:cow", [0.5, 65.0, 0.5], true)
+        game.spawn_mob("minecraft:cow", [0.5, 65.0, 0.5], true, SpawnSite::Plain)
             .unwrap();
         let kind = Arc::clone(&game.mobs[0].kind);
         let mut mobs: Vec<_> = (0..400)
@@ -1504,13 +1684,12 @@ mod tests {
                 Mob::new(i, Arc::clone(&kind), Vec3::new(x, 65.0, z), 0.0)
             })
             .collect();
-        let mut snapshot: Vec<_> = mobs.iter().map(|m| m.seen(None)).collect();
+        let mut snapshot: Vec<_> = mobs.iter().map(|m| m.seen(None, game.items())).collect();
         let base = game.mob_world_base(&[]);
         let players = super::super::super::natural_spawning::NearestPlayers::new(&[]);
         let nearest = super::super::prep::MobsNearest::new(&players, &mobs, false);
         let turns = Turns {
             base: &base,
-            despawn: base.despawn_view(),
             ticking: &|_, _| true,
             nearest: &nearest,
             single_player: Some(None),
@@ -1603,7 +1782,14 @@ mod tests {
         mobs[0] = unchanged.clone();
         // Changed locomotion grows the reach by its bound, even from rest and with NoAI: a
         // Speed II effect by a few blocks, a speed of 128 to the next herd, not the one after.
-        mobs[0].extra.effects.push(("minecraft:speed", 100, 1));
+        mobs[0]
+            .extra
+            .effects
+            .push(horizon_client::mobs::StoredEffect::new(
+                "minecraft:speed",
+                100,
+                1,
+            ));
         let speedy = reaches(&mobs, &snapshot, &turns, &owners).unwrap()[0].body;
         let grown = speedy.max(Axis::X) - plain.body.max(Axis::X);
         assert!(grown > 1.0 && grown < 10.0, "{grown}");
@@ -1620,23 +1806,36 @@ mod tests {
             assert_ne!(of[0], of[200], "{attr:?}");
             mobs[0] = unchanged.clone();
         }
+        let bad = |mobs: &[Mob], snapshot: &[Seen]| {
+            let bad = reaches_why(mobs, snapshot, &turns, &owners).err().unwrap();
+            (bad.verdict, bad.mob.map(|m| m.0))
+        };
         mobs[0].velocity.x = f64::NAN;
-        assert!(reaches(&mobs, &snapshot, &turns, &owners).is_none());
+        assert_eq!(
+            bad(&mobs, &snapshot),
+            (Verdict::UnboundedState, Some(snapshot[0].id))
+        );
         mobs[0] = unchanged;
         mobs[0].position.y = f64::NAN;
-        assert!(reaches(&mobs, &snapshot, &turns, &owners).is_none());
-        assert!(reaches(&mobs, &snapshot[..399], &turns, &owners).is_none());
+        assert_eq!(
+            bad(&mobs, &snapshot),
+            (Verdict::UnboundedState, Some(snapshot[0].id))
+        );
+        assert_eq!(
+            bad(&mobs, &snapshot[..399]),
+            (Verdict::UnboundedLists, None)
+        );
     }
 
     /// A later id is visible frozen without waiting; an earlier id waits for its publication,
     /// and a lane that unwinds without publishing releases the lookup instead of hanging it.
     #[test]
-    #[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+    #[ignore = "needs the upstream-parallel-mobs feature and prepared resources"]
     fn foreign_lookup_observes_serial_visibility_and_unwind() {
         let mut game = super::super::super::native_machines::tests::server_game();
-        game.spawn_mob("minecraft:cow", [0.5, 65.0, 0.5], true)
+        game.spawn_mob("minecraft:cow", [0.5, 65.0, 0.5], true, SpawnSite::Plain)
             .unwrap();
-        let template = game.mobs[0].seen(None);
+        let template = game.mobs[0].seen(None, game.items());
         let (sent, finished) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let draws = OrderedDraws::new(&horizon_core::random::LegacyRandom::new(7), 2);
@@ -1654,7 +1853,6 @@ mod tests {
             let foreign = Foreign {
                 board: &board,
                 reader: Cell::new(0),
-                defers: false,
             };
             assert_eq!(foreign.seen(11).unwrap().position, board.frozen[1].position);
             assert!(foreign.seen(999).is_none());
@@ -1666,7 +1864,6 @@ mod tests {
                     let publisher = Foreign {
                         board: &board,
                         reader: Cell::new(0),
-                        defers: false,
                     };
                     let mut moved = board.frozen[0].clone();
                     moved.position.x = 42.0;
@@ -1675,7 +1872,6 @@ mod tests {
                 let later = Foreign {
                     board: &board,
                     reader: Cell::new(1),
-                    defers: false,
                 };
                 assert_eq!(later.seen(10).unwrap().position.x, 42.0);
             });
@@ -1693,7 +1889,6 @@ mod tests {
                 let later = Foreign {
                     board: &missing,
                     reader: Cell::new(1),
-                    defers: false,
                 };
                 assert!(later.seen(10).is_none());
                 assert!(earlier.join().is_err());
@@ -1706,10 +1901,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+    #[ignore = "needs the upstream-parallel-mobs feature and prepared resources"]
     fn moved_riders_use_loaded_and_ticking_state_at_their_turn() {
         let mut game = super::super::super::native_machines::tests::server_game();
-        game.spawn_mob("minecraft:cow", [0.5, 65.0, 0.5], true)
+        game.spawn_mob("minecraft:cow", [0.5, 65.0, 0.5], true, SpawnSite::Plain)
             .unwrap();
         let kind = Arc::clone(&game.mobs[0].kind);
         game.world.chunks.insert(
@@ -1731,9 +1926,9 @@ mod tests {
                 m
             })
             .collect();
-        horizon_client::mobs::riders::link(&mut mobs, 11, 10);
-        horizon_client::mobs::riders::link(&mut mobs, 13, 12);
-        let snapshot: Vec<_> = mobs.iter().map(|m| m.seen(None)).collect();
+        horizon_client::mobs::riders::link_slots(&mut mobs, 11, 10);
+        horizon_client::mobs::riders::link_slots(&mut mobs, 13, 12);
+        let snapshot: Vec<_> = mobs.iter().map(|m| m.seen(None, game.items())).collect();
         // A passenger is repositioned after the initial snapshot: one enters the ticking area,
         // another leaves the loaded area. The turn must not reuse those initial roles.
         mobs[1].position.x = 1.5;
@@ -1744,7 +1939,6 @@ mod tests {
         let ticking = |x: i32, _: i32| x.rem_euclid(1000) >= 1;
         let mut turns = Turns {
             base: &base,
-            despawn: base.despawn_view(),
             ticking: &ticking,
             nearest: &nearest,
             single_player: Some(None),
@@ -1754,7 +1948,7 @@ mod tests {
         };
         let start = Start {
             events: Vec::new(),
-            random: horizon_core::random::LegacyRandom::new(7),
+            random: LevelRandom::for_level(horizon_core::random::LegacyRandom::new(7)),
             guests: Vec::new(),
             player: None,
             bindings: Default::default(),
@@ -1813,6 +2007,27 @@ mod tests {
         assert!(islands(&resting, 2).is_none());
     }
 
+    /// A serial tick says why: the verdict the `mob_islands.ticks` counter is labelled with, and
+    /// what the plan found (how many tick, how many islands, the largest) when it got that far.
+    #[test]
+    fn a_serial_tick_names_its_rule() {
+        let why = |list: &[Reach], lanes| {
+            let mut census = Census::default();
+            let verdict = islands_why(list, lanes, &mut census).err();
+            (verdict, (census.ticking, census.islands, census.largest))
+        };
+        let mut few = herd(0, 100, 0.0, 0.0);
+        few.extend(herd(1000, 100, 1000.0, 0.0));
+        assert_eq!(why(&few, 2), (Some(Verdict::FewTicking), (200, 0, 0)));
+        let mut three = few.clone();
+        three.extend(herd(2000, 100, 2000.0, 0.0));
+        assert_eq!(why(&three, 1), (Some(Verdict::OneLane), (300, 0, 0)));
+        assert_eq!(why(&three, 2), (None, (300, 3, 100)));
+        let mut lopsided = herd(0, 400, 0.0, 0.0);
+        lopsided.extend(herd(1000, 100, 1000.0, 0.0));
+        assert_eq!(why(&lopsided, 2), (Some(Verdict::OneIsland), (500, 2, 400)));
+    }
+
     fn separated_herds_game() -> Game<'static> {
         let mut game = super::super::super::native_machines::tests::server_game();
         game.build_registries();
@@ -1862,7 +2077,7 @@ mod tests {
     /// other, some with brains that draw from the level random (no villagers: their village reads
     /// reach the next herd).
     #[test]
-    #[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+    #[ignore = "needs the upstream-parallel-mobs feature and prepared resources"]
     fn islands_tick_their_mobs_as_one_thread_does() {
         struct Reset;
         impl Drop for Reset {
@@ -2041,7 +2256,7 @@ mod tests {
     /// it with the herd around its owner, and the herd far from both still ticks in a group of its
     /// own.
     #[test]
-    #[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+    #[ignore = "needs the upstream-parallel-mobs feature and prepared resources"]
     fn a_pet_teleports_to_its_owner_while_a_far_herd_ticks_apart() {
         let mut game = separated_herds_game();
         // Keep the neighbors in place while pets cross the 96-block gap.
@@ -2051,8 +2266,13 @@ mod tests {
         let herds = game.mobs.clone();
         for species in ["wolf", "cat", "parrot"] {
             game.mobs = herds.clone();
-            game.spawn_mob(&format!("minecraft:{species}"), [2.5, 65.0, 2.5], true)
-                .unwrap();
+            game.spawn_mob(
+                &format!("minecraft:{species}"),
+                [2.5, 65.0, 2.5],
+                true,
+                SpawnSite::Plain,
+            )
+            .unwrap();
             let mut pet = game.mobs.pop().unwrap();
             horizon_client::mobs::tame::set_tame(&mut pet, true);
             pet.extra.owner = Some(game.level.player_uuid.unwrap_or_default());
@@ -2076,7 +2296,7 @@ mod tests {
     /// herd tick in groups beside the other herds and leave the mobs and the level random as the
     /// serial loop does, since the serial loop draws the same way while the switch is on.
     #[test]
-    #[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+    #[ignore = "needs the upstream-parallel-mobs feature and prepared resources"]
     fn villagers_on_their_own_random_tick_in_groups_as_serial() {
         struct Reset;
         impl Drop for Reset {
@@ -2129,7 +2349,7 @@ mod tests {
     /// the level's stream, so no lane waits for it: the school leaders' rolls, which move the
     /// level random otherwise, leave it where a tick without them does.
     #[test]
-    #[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+    #[ignore = "needs the upstream-parallel-mobs feature and prepared resources"]
     fn mobs_on_their_own_random_leave_the_level_stream_alone() {
         assert_ne!(
             level_random_after_ticks(false, 3),
@@ -2145,12 +2365,17 @@ mod tests {
     /// The raiders of one raid order their hurts across it (`raids.rs`): one in each of two herds
     /// joins them, and the herd between ticks in a group of its own.
     #[test]
-    #[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+    #[ignore = "needs the upstream-parallel-mobs feature and prepared resources"]
     fn a_raid_shares_one_group_beside_a_herd() {
         let mut game = separated_herds_game();
         for x in [2.5, 194.5] {
-            game.spawn_mob("minecraft:pillager", [x, 66.0, 2.5], true)
-                .unwrap();
+            game.spawn_mob(
+                "minecraft:pillager",
+                [x, 66.0, 2.5],
+                true,
+                SpawnSite::Plain,
+            )
+            .unwrap();
             let raider = game.mobs.len() - 1;
             let state = horizon_client::mobs::raider::state_mut(&mut game.mobs[raider]);
             state.raid_id = Some(42);
@@ -2164,7 +2389,7 @@ mod tests {
     /// item's diameter, a fall of any length: 85 blocks above one herd, it joins that herd's
     /// island, and the two others tick apart.
     #[test]
-    #[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+    #[ignore = "needs the upstream-parallel-mobs feature and prepared resources"]
     fn a_fox_eating_chorus_fruit_joins_the_herd_below() {
         let mut game = separated_herds_game();
         for m in &mut game.mobs {
@@ -2172,7 +2397,7 @@ mod tests {
         }
         // The fox waits 85 blocks above the second herd, far outside every read of it, and
         // finishes its fruit this tick (`TICKS_SINCE_EATEN` is 600; the tick makes it 601).
-        game.spawn_mob("minecraft:fox", [2.5, 65.0, 2.5], true)
+        game.spawn_mob("minecraft:fox", [2.5, 65.0, 2.5], true, SpawnSite::Plain)
             .unwrap();
         let mut fox = game.mobs.pop().unwrap();
         // It stands on a one-block pillar, so `travel` keeps it on the ground until it eats.
@@ -2199,7 +2424,7 @@ mod tests {
         assert_eq!(groups, groups_for(3));
         let fox = &game.mobs[0];
         assert!(
-            fox.position.y < 100.0 && fox.extra.main_hand.is_none(),
+            fox.position.y < 100.0 && fox.extra.main_hand_id().is_none(),
             "the fox ate its fruit and really teleported down to the herd: {:?}",
             fox.position
         );
@@ -2209,7 +2434,7 @@ mod tests {
     /// 96 blocks on: its locomotion bound joins that herd, not the one past it, and the pushes
     /// at the destination come out as serially.
     #[test]
-    #[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+    #[ignore = "needs the upstream-parallel-mobs feature and prepared resources"]
     fn a_fast_mob_joins_only_the_herds_its_bound_reaches() {
         let mut game = separated_herds_game();
         for m in &mut game.mobs {
@@ -2218,7 +2443,7 @@ mod tests {
             m.on_ground = true;
             m.velocity = Vec3::ZERO;
         }
-        game.spawn_mob("minecraft:cow", [2.5, 65.0, 2.5], true)
+        game.spawn_mob("minecraft:cow", [2.5, 65.0, 2.5], true, SpawnSite::Plain)
             .unwrap();
         let mut fast = game.mobs.pop().unwrap();
         // A road from its herd's floor to the next herd's, so it runs rather than falls.

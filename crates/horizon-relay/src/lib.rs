@@ -81,52 +81,79 @@ impl Default for Config {
 }
 impl Config {
     /// The defaults with the `RELAY_*` environment variables applied: an error for a setting the relay
-    /// can't run with as given ([`Config::check`]).
+    /// can't run with as given ([`Config::check`]), and for a value that does not parse.
     pub fn from_env() -> Result<Self, String> {
-        fn var<T: std::str::FromStr>(name: &str) -> Option<T> {
-            std::env::var(name).ok()?.trim().parse().ok()
+        Self::from_vars(|name| std::env::var(name).ok())
+    }
+
+    /// [`Config::from_env`] over any source of variables (the tests give a table). A variable that is
+    /// unset or empty keeps its default; one that does not parse is an error naming it, not a default kept
+    /// without a word (`RELAY_PER_ADDRESS_LIMITS=false` behind a proxy would leave every client counted as
+    /// one address).
+    pub fn from_vars(get: impl Fn(&str) -> Option<String>) -> Result<Self, String> {
+        fn var<T: std::str::FromStr>(
+            get: &impl Fn(&str) -> Option<String>,
+            name: &str,
+            expected: &str,
+        ) -> Result<Option<T>, String> {
+            let Some(text) = get(name) else {
+                return Ok(None);
+            };
+            let text = text.trim();
+            if text.is_empty() {
+                return Ok(None);
+            }
+            text.parse()
+                .map(Some)
+                .map_err(|_| format!("{name} is {text:?}: use {expected}"))
         }
+        const COUNT: &str = "a whole number";
+        const NUMBER: &str = "a number";
+        const FLAG: &str = "0 or 1";
         let mut c = Self::default();
-        if let Some(v) = var("RELAY_MAX_HOSTS") {
+        if let Some(v) = var(&get, "RELAY_MAX_HOSTS", COUNT)? {
             c.max_hosts = v;
         }
-        if let Some(v) = var("RELAY_MAX_HOSTS_PER_ADDRESS") {
+        if let Some(v) = var(&get, "RELAY_MAX_HOSTS_PER_ADDRESS", COUNT)? {
             c.rates.hosts_per_address = v;
         }
-        if let Some(v) = var("RELAY_MAX_OPEN_PER_ADDRESS") {
+        if let Some(v) = var(&get, "RELAY_MAX_OPEN_PER_ADDRESS", COUNT)? {
             c.rates.open_per_address = v;
         }
-        if let Some(v) = var("RELAY_MAX_BRIDGES") {
+        if let Some(v) = var(&get, "RELAY_MAX_BRIDGES_PER_ADDRESS", COUNT)? {
+            c.rates.bridges_per_address = v;
+        }
+        if let Some(v) = var(&get, "RELAY_MAX_BRIDGES", COUNT)? {
             c.max_bridges = v;
         }
-        if let Some(v) = var("RELAY_MAX_PENDING_PER_HOST") {
+        if let Some(v) = var(&get, "RELAY_MAX_PENDING_PER_HOST", COUNT)? {
             c.max_pending_per_host = v;
         }
-        if let Some(v) = var("RELAY_MAX_CONNECTIONS") {
+        if let Some(v) = var(&get, "RELAY_MAX_CONNECTIONS", COUNT)? {
             c.max_connections = v;
         }
-        if let Some(v) = var::<f64>("RELAY_SESSION_KBPS") {
+        if let Some(v) = var::<f64>(&get, "RELAY_SESSION_KBPS", NUMBER)? {
             c.session_rate = v * 1024.0;
         }
-        if let Some(v) = var::<f64>("RELAY_TOTAL_MBPS") {
+        if let Some(v) = var::<f64>(&get, "RELAY_TOTAL_MBPS", NUMBER)? {
             c.total_rate = v * 1_000_000.0 / 8.0;
         }
-        if let Some(v) = var::<f64>("RELAY_GLOBAL_UNKNOWN_PER_MIN") {
+        if let Some(v) = var::<f64>(&get, "RELAY_GLOBAL_UNKNOWN_PER_MIN", NUMBER)? {
             c.global_unknown_per_min = v;
         }
-        if let Some(v) = var::<f64>("RELAY_NAMEPLATE_UNKNOWN_PER_MIN") {
+        if let Some(v) = var::<f64>(&get, "RELAY_NAMEPLATE_UNKNOWN_PER_MIN", NUMBER)? {
             c.rates.nameplate_unknown_per_min = v;
         }
-        if let Some(v) = var::<f64>("RELAY_NAMEPLATE_UNKNOWN_BURST") {
+        if let Some(v) = var::<f64>(&get, "RELAY_NAMEPLATE_UNKNOWN_BURST", NUMBER)? {
             c.rates.nameplate_unknown_burst = v;
         }
-        if let Some(v) = var::<u8>("RELAY_PER_ADDRESS_LIMITS") {
+        if let Some(v) = var::<u8>(&get, "RELAY_PER_ADDRESS_LIMITS", FLAG)? {
             c.per_address = v != 0;
         }
-        if let Some(v) = var::<u8>("RELAY_PROXY_PROTOCOL") {
+        if let Some(v) = var::<u8>(&get, "RELAY_PROXY_PROTOCOL", FLAG)? {
             c.proxy_protocol = v != 0;
         }
-        if let Ok(list) = std::env::var("RELAY_PROXY_FROM") {
+        if let Some(list) = get("RELAY_PROXY_FROM") {
             c.proxy_from = Net::parse_list(&list).map_err(|e| format!("RELAY_PROXY_FROM: {e}"))?;
         }
         c.check()?;
@@ -135,6 +162,14 @@ impl Config {
 
     /// Why the relay must not start with these settings, if it mustn't.
     pub fn check(&self) -> Result<(), String> {
+        for (name, rate) in [
+            ("RELAY_SESSION_KBPS", self.session_rate),
+            ("RELAY_TOTAL_MBPS", self.total_rate),
+        ] {
+            if !rate.is_finite() {
+                return Err(format!("{name} must be finite"));
+            }
+        }
         if self.proxy_protocol && self.proxy_from.is_empty() {
             return Err("RELAY_PROXY_PROTOCOL=1 needs RELAY_PROXY_FROM: the load balancers' addresses or \
                         ranges (e.g. 10.0.0.0/8). Without it any client could send a PROXY line and choose \
@@ -247,9 +282,12 @@ struct HostEntry {
     to_host: Sender<Out>,
     pending: usize,
 }
+/// A host's attach connection, with its place in the address's open cap: the stream goes on
+/// living in the guest's join thread, so the slot must live as long.
+type Attached = (TcpStream, SocketAddr, Option<OpenSlot>);
 struct Pending {
     nameplate: String,
-    attach: SyncSender<(TcpStream, SocketAddr)>,
+    attach: SyncSender<Attached>,
 }
 #[derive(Default)]
 struct Inner {
@@ -416,18 +454,35 @@ fn unmap(peer: SocketAddr) -> SocketAddr {
 
 /// A connection counted against its address's cap ([`limits::Limiter::open_connection`]), given
 /// back however the connection ends.
-struct OpenSlot<'a>(&'a State, std::net::IpAddr);
-impl<'a> OpenSlot<'a> {
-    fn take(state: &'a State, ip: std::net::IpAddr) -> Option<Self> {
+struct OpenSlot(Arc<State>, std::net::IpAddr);
+impl OpenSlot {
+    fn take(state: &Arc<State>, ip: std::net::IpAddr) -> Option<Self> {
         // Decided with the lock released before a slot exists: a refused one must never be built,
         // its Drop would give back a place it never took (and lock the limiter again).
         let open = locked(&state.limiter).open_connection(ip);
-        open.then(|| Self(state, ip))
+        open.then(|| Self(state.clone(), ip))
     }
 }
-impl Drop for OpenSlot<'_> {
+impl Drop for OpenSlot {
     fn drop(&mut self) {
         locked(&self.0.limiter).close_connection(self.1);
+    }
+}
+
+/// One of an address's bridges ([`limits::Limiter::open_bridge`]), taken for each end of a bridge
+/// and given back when it drops.
+struct AddressBridge(Arc<State>, std::net::IpAddr);
+impl AddressBridge {
+    fn take(state: &Arc<State>, ip: std::net::IpAddr) -> Option<Self> {
+        // As for `OpenSlot`: a refused one is never built, its Drop would give back a place it
+        // never took.
+        let open = locked(&state.limiter).open_bridge(ip);
+        open.then(|| Self(state.clone(), ip))
+    }
+}
+impl Drop for AddressBridge {
+    fn drop(&mut self) {
+        locked(&self.0.limiter).close_bridge(self.1);
     }
 }
 
@@ -456,7 +511,7 @@ fn handle(state: &Arc<State>, mut stream: TcpStream, peer: SocketAddr) -> io::Re
     // Counted per address before anything is read: past its cap a connection is closed at once,
     // not held for `first_line` with one of the relay's global slots. Behind the PROXY protocol the
     // client's address is the line the load balancer sends on connect, so it's counted after it.
-    let mut _open = None;
+    let mut open = None;
     // Behind the PROXY protocol only the load balancers may connect: anyone else is closed at
     // once, before the relay holds a slot for `first_line` waiting for a line it would refuse.
     let from_balancer =
@@ -468,7 +523,7 @@ fn handle(state: &Arc<State>, mut stream: TcpStream, peer: SocketAddr) -> io::Re
         let Some(slot) = OpenSlot::take(state, peer.ip()) else {
             return Ok(());
         };
-        _open = Some(slot);
+        open = Some(slot);
     }
     // The first line (and an HTTP request) within `first_line` in all.
     let first_line = horizon_friends::deadline(&stream, state.config.first_line)?;
@@ -483,7 +538,7 @@ fn handle(state: &Arc<State>, mut stream: TcpStream, peer: SocketAddr) -> io::Re
         let Some(slot) = OpenSlot::take(state, peer.ip()) else {
             return Ok(());
         };
-        _open = Some(slot);
+        open = Some(slot);
         line = wire::read_line(&mut stream)?.ok_or(io::ErrorKind::UnexpectedEof)?;
     }
     if line.starts_with(b"GET ") {
@@ -504,7 +559,7 @@ fn handle(state: &Arc<State>, mut stream: TcpStream, peer: SocketAddr) -> io::Re
             ..
         } if v == wire::VERSION => join(state, stream, peer, &nameplate, protocol),
         ToRelay::Attach { v, session, token } if v == wire::VERSION => {
-            attach(state, stream, peer, session, &token)
+            attach(state, stream, peer, session, &token, open)
         }
         _ => refuse(&mut stream, ErrorCode::BadRequest),
     }
@@ -732,6 +787,9 @@ fn join(
         state.rate_limited.fetch_add(1, Ordering::Relaxed);
         return refuse(&mut stream, ErrorCode::RateLimited);
     }
+    // The guest's end of the bridge, counted for its address before the lookup and given back
+    // however this join ends; a refusal is told after the lookup, so an unknown code still is one.
+    let guest_bridge = AddressBridge::take(state, peer.ip());
     let session = random_u64();
     let (atx, arx) = sync_channel(1);
     let lookup = {
@@ -745,6 +803,7 @@ fn join(
             None => Lookup::Unknown,
             Some(h) if h.protocol != protocol => Lookup::Version(h.game.clone()),
             Some(h) if h.pending >= state.config.max_pending_per_host => Lookup::Full,
+            Some(_) if guest_bridge.is_none() => Lookup::Full,
             Some(h) => match BridgeSlot::take(&state.bridges, state.config.max_bridges) {
                 Some(slot) => {
                     h.pending += 1;
@@ -803,7 +862,13 @@ fn join(
         }
     }
     match attached {
-        Ok((host, host_peer)) => bridge(state, stream, peer, host, host_peer, session, slot),
+        Ok((host, host_peer, _host_open)) => {
+            // The host's end counts for its address too, for as long as the bridge lives.
+            let Some(_host_bridge) = AddressBridge::take(state, host_peer.ip()) else {
+                return refuse(&mut stream, ErrorCode::Full);
+            };
+            bridge(state, stream, peer, host, host_peer, session, slot)
+        }
         Err(_) => {
             drop(slot);
             refuse(&mut stream, ErrorCode::HostUnreachable)
@@ -817,6 +882,7 @@ fn attach(
     peer: SocketAddr,
     session: u64,
     token: &str,
+    open: Option<OpenSlot>,
 ) -> io::Result<()> {
     let target = {
         let inner = locked(&state.inner);
@@ -832,11 +898,11 @@ fn attach(
             .map(|p| p.attach.clone())
     };
     match target {
-        Some(tx) => match tx.try_send((stream, peer)) {
+        Some(tx) => match tx.try_send((stream, peer, open)) {
             Ok(()) => Ok(()),
             Err(
-                std::sync::mpsc::TrySendError::Full((mut stream, _))
-                | std::sync::mpsc::TrySendError::Disconnected((mut stream, _)),
+                std::sync::mpsc::TrySendError::Full((mut stream, ..))
+                | std::sync::mpsc::TrySendError::Disconnected((mut stream, ..)),
             ) => refuse(&mut stream, ErrorCode::BadRequest),
         },
         None => refuse(&mut stream, ErrorCode::BadRequest),
@@ -869,26 +935,59 @@ fn bridge(
                 observed: Some(host_peer.to_string()),
             },
         )?;
+        let idle = state.config.idle;
         for s in [&guest, &host] {
-            s.set_read_timeout(Some(state.config.idle))?;
+            if cfg!(windows) {
+                s.set_read_timeout(Some(idle.min(WAITING_TURN)))?;
+                s.set_write_timeout(Some(idle))?;
+            } else {
+                s.set_read_timeout(Some(idle))?;
+            }
             let _ = s.set_nodelay(true);
             let _ = horizon_friends::set_tcp_keepalive(s);
         }
         let (g, h, st) = (guest.try_clone()?, host.try_clone()?, state.clone());
+        let ended = Arc::new(AtomicBool::new(false));
+        let other = ended.clone();
         let up = std::thread::Builder::new()
             .name("relay-copy".into())
-            .spawn(move || copy(&st, g, h))?;
-        copy(state, host, guest);
+            .spawn(move || copy(&st, g, h, &other))?;
+        copy(state, host, guest, &ended);
         let _ = up.join();
         Ok(())
     })()
 }
 
-fn copy(state: &State, mut from: TcpStream, mut to: TcpStream) {
+/// How long a read waits on Windows before looking whether the bridge has ended.
+const WAITING_TURN: Duration = Duration::from_millis(100);
+
+/// Whether `from` has something to read, a close included, before `idle` runs out or the other
+/// direction ends. For Windows, where `shutdown` wakes neither a read nor a write blocked on another
+/// handle of the socket. Peeking, so a wait that times out can't lose bytes.
+fn wait_for_data(from: &TcpStream, idle: Duration, ended: &AtomicBool) -> bool {
+    let since = Instant::now();
+    while !ended.load(Ordering::Relaxed) && since.elapsed() < idle {
+        match from.peek(&mut [0]) {
+            Ok(_) => return true,
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                ) => {}
+            Err(_) => return false,
+        }
+    }
+    false
+}
+
+fn copy(state: &State, mut from: TcpStream, mut to: TcpStream, ended: &AtomicBool) {
     let rate = state.config.session_rate;
     let mut bucket = Bucket::new(rate, (rate / 2.0).max(16384.0), Instant::now());
     let mut buf = [0u8; 16 * 1024];
     loop {
+        if cfg!(windows) && !wait_for_data(&from, state.config.idle, ended) {
+            break;
+        }
         let n = match from.read(&mut buf) {
             Ok(0) | Err(_) => break,
             Ok(n) => n,
@@ -905,6 +1004,7 @@ fn copy(state: &State, mut from: TcpStream, mut to: TcpStream) {
         }
         state.relayed_bytes.fetch_add(n as u64, Ordering::Relaxed);
     }
+    ended.store(true, Ordering::Relaxed);
     let _ = from.shutdown(Shutdown::Both);
     let _ = to.shutdown(Shutdown::Both);
 }
@@ -937,6 +1037,41 @@ mod tests {
     }
 
     #[test]
+    fn bandwidth_settings_reject_nonfinite_values() {
+        for rate in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            for (name, config) in [
+                (
+                    "RELAY_SESSION_KBPS",
+                    Config {
+                        session_rate: rate,
+                        ..Config::default()
+                    },
+                ),
+                (
+                    "RELAY_TOTAL_MBPS",
+                    Config {
+                        total_rate: rate,
+                        ..Config::default()
+                    },
+                ),
+            ] {
+                assert_eq!(config.check(), Err(format!("{name} must be finite")));
+            }
+        }
+        for rate in [-1.0, 0.0, 1.0, 1_048_576.0] {
+            assert!(
+                Config {
+                    session_rate: rate,
+                    total_rate: rate,
+                    ..Config::default()
+                }
+                .check()
+                .is_ok()
+            );
+        }
+    }
+
+    #[test]
     fn proxy_protocol_needs_its_load_balancers() {
         let on = Config {
             proxy_protocol: true,
@@ -952,6 +1087,43 @@ mod tests {
         for bad in ["10.0.0.0/33", "nope", "10.0.0.1/x", "::/129"] {
             assert!(Net::parse_list(bad).is_err(), "{bad}");
         }
+    }
+
+    /// A `RELAY_*` value that does not parse is an error naming the variable, not a default kept without a
+    /// word: `RELAY_PER_ADDRESS_LIMITS=false` behind a proxy left every client counted as one address.
+    #[test]
+    fn a_setting_that_does_not_parse_is_refused() {
+        for (name, value) in [
+            ("RELAY_PER_ADDRESS_LIMITS", "false"),
+            ("RELAY_PROXY_PROTOCOL", "true"),
+            ("RELAY_MAX_HOSTS", "ten"),
+            ("RELAY_MAX_HOSTS_PER_ADDRESS", "-1"),
+            ("RELAY_SESSION_KBPS", "fast"),
+            ("RELAY_TOTAL_MBPS", "100Mbps"),
+            ("RELAY_NAMEPLATE_UNKNOWN_BURST", "1,5"),
+        ] {
+            let error = Config::from_vars(|n| (n == name).then(|| value.to_string())).unwrap_err();
+            assert!(error.contains(name) && error.contains(value), "{error}");
+        }
+        // The same names with values that parse apply, spaces around them are ignored, and an empty
+        // or unset one keeps its default.
+        let set = |name: &'static str, value: &'static str| {
+            Config::from_vars(move |n| (n == name).then(|| value.to_string())).unwrap()
+        };
+        let defaults = Config::default();
+        assert_eq!(set("RELAY_MAX_HOSTS", " 7 ").max_hosts, 7);
+        assert!(!set("RELAY_PER_ADDRESS_LIMITS", "0").per_address);
+        assert_eq!(set("RELAY_SESSION_KBPS", "2.5").session_rate, 2.5 * 1024.0);
+        assert_eq!(set("RELAY_MAX_HOSTS", "").max_hosts, defaults.max_hosts);
+        assert_eq!(
+            set("RELAY_MAX_BRIDGES", "  ").max_bridges,
+            defaults.max_bridges
+        );
+        assert_eq!(set("RELAY_UNKNOWN", "x").max_hosts, defaults.max_hosts);
+        // A list of load balancers still names its variable when it is wrong.
+        let error = Config::from_vars(|n| (n == "RELAY_PROXY_FROM").then(|| "nowhere".to_string()))
+            .unwrap_err();
+        assert!(error.starts_with("RELAY_PROXY_FROM: "), "{error}");
     }
 
     #[test]

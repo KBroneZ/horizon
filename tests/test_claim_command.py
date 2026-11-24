@@ -1,6 +1,8 @@
+import json
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 from tools.ci import claim_command as cc
 from tools.ci import nightly_set as ns
@@ -27,8 +29,10 @@ def listing(*lines):
 LIST = listing("kacpherek", "rdbtCVS")
 
 
-def thread(state="open", holders=(), pr=False, locked=False):
-    t = {"state": state, "assignees": [{"login": h} for h in holders], "locked": locked}
+def thread(state="open", holders=(), pr=False, locked=False, author="filer", age=timedelta(days=1), bot=False):
+    t = {"state": state, "assignees": [{"login": h} for h in holders], "locked": locked,
+         "user": {"login": author, "type": "Bot" if bot else "User"},
+         "created_at": (NOW - age).strftime("%Y-%m-%dT%H:%M:%SZ")}
     if pr:
         t["pull_request"] = {"merged_at": None}
     return t
@@ -58,7 +62,7 @@ class Fake:
 
 def do(text, api=None, login="newcomer", reviewers=LIST, n=5):
     api = api or Fake()
-    return cc.run(api, cc.parse(text), actor(login), n, reviewers), api
+    return cc.run(api, cc.parse(text), actor(login), n, reviewers, NOW), api
 
 
 class ParseTests(unittest.TestCase):
@@ -129,6 +133,34 @@ class ClaimTests(unittest.TestCase):
         self.assertEqual(api.calls, [])
         do("/claim", Fake(claims=cc.MAX_CLAIMS - 1))
 
+    def test_only_the_claimants_own_pull_request_lifts_an_issue_off_the_limit(self):
+        def closing(*authors, more=False):
+            return {"pageInfo": {"hasNextPage": more, "endCursor": "k" if more else None},
+                    "nodes": [{"author": {"login": a} if a else None} for a in authors]}
+
+        def node(number, *authors, more=False):
+            return {"number": number, "closedByPullRequestsReferences": closing(*authors, more=more)}
+
+        # The claimant's pull request is the eleventh on issue 5: it is on the connection's second page.
+        nodes = [node(1), node(2, "someone-else"), node(3, "Newcomer"), node(4, "someone-else", "newcomer"),
+                 node(5, *["someone-else"] * 10, more=True), node(6, None)]
+        pages = [{"pageInfo": {"hasNextPage": True, "endCursor": "c"}, "nodes": nodes[:2]},
+                 {"pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": nodes[2:]}]
+        asked = []
+
+        def gh(*args, **kwargs):
+            asked.append(args)
+            if any(a == "number=5" for a in args):
+                return json.dumps({"data": {"repository": {"issue": {
+                    "closedByPullRequestsReferences": closing("newcomer")}}}})
+            return json.dumps({"data": {"repository": {"issues": pages[sum("login=newcomer" in a for a in asked) - 1]}}})
+
+        with mock.patch.object(cc, "gh", gh):
+            # Not linked, linked by another account, a deleted account: counted. Linked by the claimant, on the
+            # first page or a later one: not.
+            self.assertEqual(cc.Api("o/r").open_claims("newcomer"), 3)
+        self.assertEqual(len(asked), 3)
+
     def test_team_has_no_limit_unless_paused(self):
         do("/claim", Fake(claims=50), login="ludovic111")
         do("/claim", Fake(claims=50), login="RdbtCVS")
@@ -138,6 +170,34 @@ class ClaimTests(unittest.TestCase):
     def test_github_dropped_the_assignee(self):
         with self.assertRaisesRegex(cc.Refused, "didn't assign"):
             do("/claim", Fake(assignable=False))
+
+
+class GraceTests(unittest.TestCase):
+    def test_non_author_is_refused_inside_the_window(self):
+        api = Fake({5: thread(age=timedelta(minutes=2))})
+        with self.assertRaises(cc.Refused):
+            do("/claim", api)
+        with self.assertRaises(cc.Refused):
+            do("/claim", Fake({5: thread(age=timedelta(minutes=59))}), login="ludovic111")
+        self.assertEqual(api.calls, [])
+
+    def test_refusal_text(self):
+        with self.assertRaises(cc.Refused) as e:
+            do("/claim", Fake({5: thread(age=timedelta(minutes=2))}))
+        self.assertEqual(str(e.exception), "@filer filed this issue 2 minutes ago: they have the first hour to claim it "
+                                           "(until 12:58 UTC).")
+
+    def test_author_claims_inside_the_window(self):
+        text, api = do("/claim", Fake({5: thread(age=timedelta(minutes=2))}), login="Filer")
+        self.assertIsNone(text)
+        self.assertEqual(api.calls, [("assign", 5, "Filer")])
+
+    def test_anyone_claims_after_the_window(self):
+        do("/claim", Fake({5: thread(age=cc.AUTHOR_GRACE)}))
+
+    def test_bot_filed_issues_have_no_window(self):
+        do("/claim", Fake({5: thread(age=timedelta(seconds=5), bot=True)}))
+        do("/claim", Fake({5: thread(age=timedelta(seconds=5), author="kira-horizon[bot]")}))
 
 
 class UnclaimTests(unittest.TestCase):
@@ -199,6 +259,12 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(cc.stale_claims(node(events=[assigned("dev", 9), mentioned("CLOSED")]), NOW), ["dev"])
         self.assertEqual(cc.stale_claims(node(events=[assigned("dev", 9), {"__typename": "CrossReferencedEvent",
                                                                           "source": {}}]), NOW), ["dev"])
+
+    def test_a_saturated_timeline_window_keeps_the_claim(self):
+        # With `last: 100`, an open PR link older than the newest 100 events is invisible. Keep the claim
+        # rather than unassigning a contributor whose protection we cannot see.
+        full = [assigned("other", 1) for _ in range(cc.TIMELINE_WINDOW)]
+        self.assertEqual(cc.stale_claims(node(events=[assigned("dev", 6), *full]), NOW), [])
 
     def test_release_unassigns_and_says_why(self):
         class Api(Fake):
