@@ -9,7 +9,7 @@
 #![forbid(unsafe_code)]
 
 use horizon_platform::hooks::{self, Hooks};
-use horizon_platform::{pages, settings};
+use horizon_platform::{mod_links, pages, settings};
 
 /// Every Horizon part in the game, in the order its hooks run.
 const PARTS: [&dyn Hooks; 7] = [
@@ -41,11 +41,33 @@ const PAGES: [&dyn pages::Page; 3] = [
     &horizon_pregen::SECTION,
 ];
 
+/// The product chooses the built-in Mods screen entries' outside links.
+static MOD_LINKS: [mod_links::Links; 2] = [
+    mod_links::Links {
+        id: "minecraft",
+        license: None,
+        homepage: Some(horizon_addresses::MINECRAFT_WEBSITE),
+        issues: Some(horizon_addresses::MINECRAFT_ISSUES),
+    },
+    mod_links::Links {
+        id: "horizon",
+        license: Some(horizon_addresses::LICENSE),
+        homepage: Some(horizon_addresses::WEBSITE),
+        issues: Some(horizon_addresses::ISSUES),
+    },
+];
+
 /// Registers Horizon's in-game parts with the game. The executable calls it before it runs the
 /// game, and so does the launcher's generated executable for native mods.
 pub fn register() {
+    // Horizon's mark in the windows and the taskbar (branding: the plain game keeps the default
+    // icon), and the menus' look, here too for the native-mod executable, which starts the game
+    // without `horizon_game::main`.
+    horizon_game::set_icon_png(horizon_theme::ICON_PNG);
+    horizon_game::give_menu_look();
     let late = PARTS.into_iter().map(hooks::register);
     let late = late.chain(STORES.into_iter().map(settings::register));
+    let late = late.chain(MOD_LINKS.iter().map(mod_links::register));
     for result in late.chain(PAGES.into_iter().map(pages::register)) {
         if let Err(e) = result {
             // The executable registered after starting the game: a bug, not a player's problem.

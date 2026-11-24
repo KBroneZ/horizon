@@ -14,11 +14,15 @@
 //!
 //! The platform registries (docs/layers.md, "Platform registries") have the same shape:
 //! [`settings`] for the settings each crate keeps in its own lines, [`pages`] for its settings
-//! pages, [`hud`] for what it draws on the HUD, [`lang`] for the lang files with its text.
+//! pages, [`hud`] for what it draws on the HUD, [`lang`] for the lang files with its text,
+//! [`input`] for the factory of the game's input source.
 #![forbid(unsafe_code)]
 
+pub mod actions;
 pub mod hud;
+pub mod input;
 pub mod lang;
+pub mod mod_links;
 pub mod pages;
 pub mod perf;
 pub mod players;
@@ -185,6 +189,8 @@ pub enum Dimension {
     Overworld,
     Nether,
     End,
+    /// A custom dimension, with no private identifier published.
+    Other,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -262,6 +268,7 @@ pub mod engine {
     /// registration ends.
     pub fn seal() {
         all();
+        crate::actions::all();
         crate::settings::all();
         crate::pages::engine::all();
         crate::hud::engine::all();
@@ -418,6 +425,9 @@ mod tests {
         }
         fn published(&self, open: bool) {
             self.0.lock().unwrap().push(format!("published {open}"));
+        }
+        fn shutdown(&self) {
+            self.0.lock().unwrap().push("shutdown".into());
         }
         fn activity(&self, now: Activity) {
             self.0.lock().unwrap().push(format!("{now:?}"));
@@ -665,6 +675,7 @@ mod tests {
                 "published false",
                 "Menus",
                 "World { play: Singleplayer, dimension: Nether, mode: Creative }",
+                "shutdown",
                 "frame 4"
             ]
         );

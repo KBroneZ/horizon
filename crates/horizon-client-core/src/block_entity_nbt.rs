@@ -12,7 +12,10 @@
 //! [`overlay`] merges a block entity Horizon models (and re-encodes from its own,
 //! partial state) with the NBT it was loaded from, so fields Horizon does not model
 //! survive and only what the game changed is replaced.
-use horizon_world::nbt::{Compound, Tag};
+use horizon_core::nbt::{Compound, Tag};
+
+mod book_page;
+mod item_predicate;
 
 fn string(s: &str) -> Tag {
     Tag::String(s.into())
@@ -83,6 +86,20 @@ struct Fields<'a> {
     out: Compound,
 }
 impl<'a> Fields<'a> {
+    /// Every key of `tag` but the metadata the tail of `canonical` writes.
+    fn custom(&mut self, tag: &Tag) {
+        if let Tag::Compound(c) = tag {
+            for (k, v) in c {
+                let key = k.to_string_lossy();
+                if !matches!(
+                    key.as_str(),
+                    "id" | "x" | "y" | "z" | "keepPacked" | "components"
+                ) {
+                    self.out.insert(k.clone(), v.clone());
+                }
+            }
+        }
+    }
     fn put(&mut self, key: &str, value: Tag) {
         self.out.insert(key.into(), value);
     }
@@ -201,6 +218,103 @@ pub fn component(tag: &Tag) -> Option<Tag> {
         }
         _ => None,
     }
+}
+
+/// The persistent `DataComponentMap` in a block entity's NBT. A failed
+/// entry leaves the other entries intact. The caller supplies the parser for
+/// the block and entity sources used by NBT text components in stored locks.
+pub fn stored_components(
+    tag: Option<&Tag>,
+    known_holder: &dyn Fn(&str, &str) -> bool,
+    component_types: &[String],
+    valid_nbt_source: &dyn Fn(&str, &str) -> bool,
+) -> Compound {
+    decode_component_entries(tag, |id, value| match id {
+        "minecraft:rarity" => matches!(
+            text(Some(value)).as_deref(),
+            Some("common" | "uncommon" | "rare" | "epic")
+        )
+        .then(|| value.clone()),
+        "minecraft:custom_name" | "minecraft:item_name" => component(value),
+        "minecraft:custom_data" => matches!(value, Tag::Compound(_)).then(|| value.clone()),
+        "minecraft:lock" => {
+            item_predicate::decode(value, known_holder, component_types, valid_nbt_source)
+        }
+        "minecraft:container" => stored_container(value, &|id| known_holder("minecraft:item", id)),
+        _ => Some(value.clone()),
+    })
+}
+
+fn decode_component_entries(
+    tag: Option<&Tag>,
+    mut decode: impl FnMut(&str, &Tag) -> Option<Tag>,
+) -> Compound {
+    let Some(Tag::Compound(entries)) = tag else {
+        return Compound::new();
+    };
+    let mut decoded = Compound::new();
+    for (key, value) in entries {
+        let raw = key.to_string_lossy();
+        let Some(id) = crate::identifier::normalize_id(&raw) else {
+            continue;
+        };
+        let Some(value) = decode(&id, value) else {
+            continue;
+        };
+        let key = id.as_str().into();
+        if raw == id {
+            decoded.insert(key, value);
+        } else {
+            decoded.entry(key).or_insert(value);
+        }
+    }
+    decoded
+}
+
+/// `ItemContainerContents.CODEC` reads slot/template records with partial
+/// list decoding and writes occupied slots in ascending order.
+fn stored_container(tag: &Tag, known_item: &dyn Fn(&str) -> bool) -> Option<Tag> {
+    let entries = match tag {
+        Tag::List(entries) => entries.as_slice(),
+        Tag::ByteArray(_) | Tag::IntArray(_) | Tag::LongArray(_) => &[],
+        _ => return None,
+    };
+    use horizon_world::datafix::dynamic::{Number, as_number};
+    let slots: std::collections::BTreeMap<_, _> = entries
+        .iter()
+        .filter_map(|entry| {
+            let slot = as_number(entry.get("slot")?)?.int_value();
+            if !(0..256).contains(&slot) {
+                return None;
+            }
+            let input = entry.get("item")?;
+            let Tag::Compound(mut item) = template(input)? else {
+                return None;
+            };
+            let id = crate::identifier::normalize_id(&text(item.get(&"id".into()))?)?;
+            if id == "minecraft:air" || !known_item(&id) {
+                return None;
+            }
+            item.insert("id".into(), string(&id));
+            item.remove(&"count".into());
+            if let Some(count) = input
+                .get("count")
+                .and_then(as_number)
+                .map(Number::int_value)
+                .filter(|count| (2..=99).contains(count))
+            {
+                item.insert("count".into(), Tag::Int(count));
+            }
+            Some((slot, Tag::Compound(item)))
+        })
+        .take(256)
+        .collect();
+    Some(Tag::List(
+        slots
+            .into_iter()
+            .map(|(slot, item)| Tag::compound([("slot", Tag::Int(slot)), ("item", item)]))
+            .collect(),
+    ))
 }
 
 /// `ItemStack.CODEC`: `id`, `count` (1..=99, default 1) and a non-empty `components`
@@ -385,6 +499,12 @@ pub const TYPES: [&str; 47] = [
 /// The two types added after the ones above in 26.3.
 pub const NEWEST: [&str; 2] = ["minecraft:copper_golem_statue", "minecraft:potent_sulfur"];
 
+/// Whether `id` is in the `minecraft:block_entity_type` registry: one of
+/// vanilla's, or one a mod declared.
+pub fn is_known_type(id: &str) -> bool {
+    TYPES.iter().chain(&NEWEST).any(|k| *k == id) || crate::block_entity_types::declared(id)
+}
+
 /// The block entity as vanilla would save it after loading `tag` (a full block
 /// entity compound with `id`, `x`, `y`, `z`); None for an unknown type or a tag
 /// without a position.
@@ -395,6 +515,23 @@ pub fn canonical(tag: &Tag) -> Option<Tag> {
         input: tag,
         out: Compound::new(),
     };
+    // A mod's type: its own fields as loaded (`saveAdditional`), the
+    // position, and its component patch only when it has one, as a mod block
+    // entity is saved in a chunk.
+    if crate::block_entity_types::declared(&id) {
+        f.custom(tag);
+        let mut out = f.out;
+        out.insert("id".into(), string(&id));
+        out.insert("x".into(), Tag::Int(x));
+        out.insert("y".into(), Tag::Int(y));
+        out.insert("z".into(), Tag::Int(z));
+        if let Some(c @ Tag::Compound(patch)) = tag.get("components")
+            && !patch.is_empty()
+        {
+            out.insert("components".into(), c.clone());
+        }
+        return Some(Tag::Compound(out));
+    }
     match id.as_str() {
         "minecraft:furnace" | "minecraft:smoker" | "minecraft:blast_furnace" => {
             f.base_container();
@@ -703,17 +840,7 @@ pub fn canonical(tag: &Tag) -> Option<Tag> {
             // and defaulted by vanilla; they are kept as loaded. No `spawn_data` is
             // added: an absent one loads as Optional.empty and is not stored, and
             // an empty entity would keep the spawner from ever picking a mob.
-            if let Tag::Compound(c) = tag {
-                for (k, v) in c {
-                    let key = k.to_string_lossy();
-                    if !matches!(
-                        key.as_str(),
-                        "id" | "x" | "y" | "z" | "keepPacked" | "components"
-                    ) {
-                        f.out.insert(k.clone(), v.clone());
-                    }
-                }
-            }
+            f.custom(tag);
         }
         "minecraft:vault" => {
             // `VaultConfig.DEFAULT` (when the config is absent): the trial key and the
@@ -767,10 +894,13 @@ pub fn canonical(tag: &Tag) -> Option<Tag> {
     out.insert("keepPacked".into(), Tag::Byte(0));
     out.insert(
         "components".into(),
-        match tag.get("components") {
-            Some(c @ Tag::Compound(_)) => c.clone(),
-            _ => Tag::Compound(Compound::new()),
-        },
+        // Command and chunk readers validate source strings before this save pass.
+        Tag::Compound(stored_components(
+            tag.get("components"),
+            &|_, _| true,
+            &[],
+            &|_, _| true,
+        )),
     );
     Some(Tag::Compound(out))
 }
@@ -850,7 +980,44 @@ fn keyed_by_slot(list: &[Tag]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use horizon_world::nbt::parse_snbt;
+    use horizon_core::nbt::parse_snbt;
+
+    #[test]
+    fn stored_block_entity_components_decode_entries_independently() {
+        let input = snbt(
+            r#"{id:"minecraft:beehive",x:0,y:64,z:0,components:{rarity:7,custom_data:{a:1b},custom_name:{text:"Nest"},container:[{slot:-1,item:{id:dirt}},{slot:-0.5f,item:{id:stone,count:100}},{slot:1,item:{id:air}}]}}"#,
+        );
+        let expected = snbt(
+            r#"{"minecraft:custom_data":{a:1b},"minecraft:custom_name":"Nest","minecraft:container":[{slot:0,item:{id:"minecraft:stone"}}]}"#,
+        );
+        let saved = canonical(&input).unwrap();
+        assert_eq!(saved.get("components"), Some(&expected));
+    }
+
+    #[test]
+    fn stored_lock_decodes_optional_item_predicate_fields() {
+        for (raw, expected) in [
+            (r#"{items:2}"#, r#"{}"#),
+            (
+                r#"{items:"stone",garbage:1}"#,
+                r#"{items:"minecraft:stone"}"#,
+            ),
+            (
+                r#"{items:["stone"],count:{min:2,max:2},components:{custom_name:{text:"Key"}},garbage:1}"#,
+                r#"{items:"minecraft:stone",count:2,components:{"minecraft:custom_name":"Key"}}"#,
+            ),
+        ] {
+            let saved = canon(&format!(
+                r#"{{id:"minecraft:beehive",x:0,y:64,z:0,components:{{lock:{raw},custom_data:{{a:1b}}}}}}"#
+            ));
+            assert_eq!(
+                saved.get("components"),
+                Some(&snbt(&format!(
+                    r#"{{"minecraft:lock":{expected},"minecraft:custom_data":{{a:1b}}}}"#
+                )))
+            );
+        }
+    }
 
     fn snbt(s: &str) -> Tag {
         parse_snbt(s).expect("snbt").0
@@ -1090,7 +1257,7 @@ mod tests {
 #[cfg(test)]
 mod pot_template_tests {
     use super::*;
-    use horizon_world::nbt::parse_snbt;
+    use horizon_core::nbt::parse_snbt;
 
     #[test]
     fn decorated_pot_string_template_load_save_uses_item_compound() {

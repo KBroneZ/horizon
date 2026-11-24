@@ -1,5 +1,5 @@
 //! The whole submission against a mock GitHub: sign in, submit the sample
-//! signed mod (`crates/horizon-mods/tests/index`), and what lands on GitHub;
+//! signed mod (`crates/horizon-mod-package/tests/index`), and what lands on GitHub;
 //! then what is refused. Then ratings: who may rate what, and what is shown.
 use axum::{
     Json, Router,
@@ -10,7 +10,7 @@ use axum::{
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use horizon_mod_registry::{App, Config, github, router};
-use horizon_mods::index::registry::Entry;
+use horizon_platform::mod_package::index::registry::Entry;
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use std::{
@@ -21,7 +21,7 @@ use std::{
 use tower::ServiceExt;
 
 const PUBLIC: &str = "https://playhorizon.test";
-const HMOD_SHA: &str = "e1135345692f6dd8fd4c51920151944b82333e17049c9bb7d756f27b8deefc53";
+const HMOD_SHA: &str = "f891bde88f4b841fd35c4f3305bc8904b671ebe9d5ad28d5aecc57e8b23fc3ce";
 
 #[derive(Default)]
 struct Mock {
@@ -42,6 +42,12 @@ struct Mock {
     slow_pull: Option<std::time::Duration>,
     /// Branches moved back to main.
     resets: Vec<String>,
+    native_comparisons: HashMap<String, (StatusCode, Value)>,
+    native_checks: usize,
+    native_dispatches: Vec<Value>,
+    native_release: Option<(String, String)>,
+    /// Every request GitHub got, as "METHOD path".
+    requests: Vec<String>,
 }
 
 type Shared = Arc<Mutex<Mock>>;
@@ -152,6 +158,39 @@ async fn mock_github() -> (String, Shared) {
             }),
         )
         .route(
+            "/repos/horizon-rust/horizon/compare/{spec}",
+            get(|State(s): State<Shared>, UrlPath(spec): UrlPath<String>| async move {
+                let base = spec.strip_prefix("main...").unwrap();
+                let mut s = s.lock().unwrap();
+                s.native_checks += 1;
+                let (status, body) = s
+                    .native_comparisons
+                    .get(base)
+                    .cloned()
+                    .unwrap_or((StatusCode::NOT_FOUND, json!({})));
+                (status, Json(body))
+            }),
+        )
+        .route(
+            "/repos/o/r/releases/tags/{tag}",
+            get(|State(s): State<Shared>, UrlPath(tag): UrlPath<String>| async move {
+                let s = s.lock().unwrap();
+                match &s.native_release {
+                    Some((expected, archive)) if expected == &tag => {
+                        Ok(Json(json!({"assets": [{"name": archive}]})))
+                    }
+                    _ => Err(StatusCode::NOT_FOUND),
+                }
+            }),
+        )
+        .route(
+            "/repos/o/r/actions/workflows/native-build.yml/dispatches",
+            post(|State(s): State<Shared>, Json(body): Json<Value>| async move {
+                s.lock().unwrap().native_dispatches.push(body);
+                StatusCode::NO_CONTENT
+            }),
+        )
+        .route(
             "/repos/o/r/pulls",
             get(|State(s): State<Shared>, Query(q): Query<HashMap<String, String>>| async move {
                 assert_eq!(q["state"], "open");
@@ -184,6 +223,16 @@ async fn mock_github() -> (String, Shared) {
                 Json(json!([]))
             }),
         )
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            |State(s): State<Shared>, request: Request<Body>, next: axum::middleware::Next| async move {
+                s.lock()
+                    .unwrap()
+                    .requests
+                    .push(format!("{} {}", request.method(), request.uri().path()));
+                next.run(request).await
+            },
+        ))
         .with_state(state.clone());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
@@ -192,7 +241,7 @@ async fn mock_github() -> (String, Shared) {
 }
 
 fn fixtures() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../horizon-mods/tests/index")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../horizon-mod-package/tests/index")
 }
 
 struct Client {
@@ -391,6 +440,7 @@ async fn setup_keyed(
         update_key: update_key.map(<[u8]>::to_vec),
         scratch,
         database: ":memory:".into(),
+        trust_proxy: false,
     };
     let client = Client {
         app: router(App::new(config).unwrap()),
@@ -435,7 +485,10 @@ async fn a_submission_becomes_a_pull_request() {
             "{body}"
         );
         assert!(body.contains("/mods/submit) by @alice."), "{body}");
-        assert!(body.contains("may draw text on your screen"), "{body}");
+        assert!(
+            body.contains("may add blocks, items, mob effects"),
+            "{body}"
+        );
     }
     // The same version again: its pull request is open.
     let (status, json) = client.submit(&csrf, &form(), &file).await;
@@ -571,6 +624,18 @@ async fn everything_else_waits_for_a_reviewer() {
     )
     .await;
     unsigned(&body, &labels);
+    // Removing screenshots is a page change even when no image is uploaded.
+    let (body, labels) = update(
+        with_screenshots(),
+        |f| {
+            f["screenshots"] = json!([]);
+            f.as_object_mut().unwrap().remove("key");
+            f.as_object_mut().unwrap().remove("signature");
+        },
+        Some(UPDATE_KEY),
+    )
+    .await;
+    unsigned(&body, &labels);
     // A project with no key (and so no signature) is signed as well.
     let unkeyed = |f: &mut Value| {
         f.as_object_mut().unwrap().remove("key");
@@ -652,11 +717,15 @@ async fn what_the_form_refuses() {
     refused(status, &json, "the file's id is \"coords_hud\"");
     // A broken signature.
     let mut f = form();
-    f["signature"] = json!(
-        std::fs::read_to_string(fixtures().join("coords_hud-0.1.0.hmod.minisig"))
-            .unwrap()
-            .replace("RUTV", "RUTW")
-    );
+    let signature =
+        std::fs::read_to_string(fixtures().join("coords_hud-0.1.0.hmod.minisig")).unwrap();
+    let mut lines: Vec<_> = signature.lines().map(str::to_owned).collect();
+    let mut bytes = STANDARD.decode(&lines[1]).unwrap();
+    bytes[10] ^= 1;
+    lines[1] = STANDARD.encode(bytes);
+    let broken = lines.join("\n");
+    assert_ne!(broken, signature.trim_end());
+    f["signature"] = json!(broken);
     let (status, json) = client.submit(&csrf, &f, &file).await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{json}");
     // A shader pack runs the game's own check: a mod's file isn't one.
@@ -689,7 +758,7 @@ async fn what_the_form_refuses() {
     let (status, ..) = client.send(request).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
     // Too big: past the file's own limit, and past the whole body's.
-    let max = horizon_mods::index::MAX_FILE as usize;
+    let max = horizon_platform::mod_package::index::MAX_FILE as usize;
     for size in [max + 1, max + (200 << 10)] {
         let (status, json) = client.submit(&csrf, &form(), &vec![0; size]).await;
         assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE, "{size}: {json}");
@@ -758,6 +827,7 @@ async fn a_submission_comes_from_the_sites_own_pages() {
                 update_key: None,
                 scratch: std::env::temp_dir().join("horizon-mod-registry-test"),
                 database: ":memory:".into(),
+                trust_proxy: false,
             })
             .unwrap(),
         )
@@ -1018,29 +1088,22 @@ async fn a_retry_takes_up_its_own_branch() {
     assert_eq!(mock.lock().unwrap().resets, [branch.as_str()]);
 }
 
-/// A native rewrite (`.hnmod`) of `coords_hud` at `version`.
-fn hnmod(version: &str) -> Vec<u8> {
-    use std::io::Write;
-    let revision = "a".repeat(40);
-    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
-    let options = zip::write::SimpleFileOptions::default();
-    zip.start_file("horizon-native.json", options).unwrap();
-    let manifest = json!({"schema": 1, "id": "coords_hud", "version": version, "game": "26.3", "horizon": revision, "mixins": "b".repeat(40)});
-    zip.write_all(manifest.to_string().as_bytes()).unwrap();
-    zip.start_file("mixins/coords_hud/horizon-mixin.toml", options)
-        .unwrap();
-    write!(
-        zip,
-        "[mod]\nid = \"coords_hud\"\nversion = \"{version}\"\n[compatibility]\nhorizon_revision = \"{revision}\"\n"
-    )
-    .unwrap();
-    zip.finish().unwrap().into_inner()
+/// A native rewrite (`.hmod`) of `coords_hud` at `version`.
+fn hmod(version: &str) -> Vec<u8> {
+    let manifest = format!(
+        "id = 'coords_hud'\nname = 'Coordinates'\nversion = '{version}'\napi = '0.2'\ncapabilities = ['registries']\n[native]\ngame = '26.3'\nhorizon = '{}'\nmixins = '{}'\n",
+        "a".repeat(40),
+        "b".repeat(40)
+    );
+    let files: &[(&str, &[u8])] = &[
+        ("Cargo.toml", b"[package]\nname='coords'\nversion='1'\n"),
+        ("src/lib.rs", b"pub fn hooks() {}"),
+    ];
+    horizon_platform::mod_package::Package::write_files(&manifest, files).unwrap()
 }
 
-/// A WebAssembly mod's entry turns `native-mod` once, by its owner; its
-/// `.hmod` versions stay. No other kind change.
 #[tokio::test(flavor = "multi_thread")]
-async fn a_mod_turns_native_once() {
+async fn a_mod_cannot_turn_native() {
     let (mut client, mock) = setup().await;
     let published = format!(
         "id = \"coords_hud\"\nkind = \"mod\"\nname = \"C\"\nsummary = \"s\"\nowners = [\"Alice\"]\nlicense = \"MIT\"\nsource = \"https://x.test\"\n\n[[versions]]\nversion = \"0.1.0\"\npublished = \"2026-01-01\"\ngame = \"26.3\"\nfile = \"coords_hud-0.1.0.hmod\"\nsha256 = \"{HMOD_SHA}\"\n"
@@ -1048,63 +1111,17 @@ async fn a_mod_turns_native_once() {
     mock.lock()
         .unwrap()
         .main
-        .insert("mods/coords_hud.toml".into(), published.clone());
+        .insert("mods/coords_hud.toml".into(), published);
     let csrf = client.sign_in().await;
     let mut native = form();
     native["kind"] = json!("native-mod");
     native["version"] = json!("0.2.0");
     native["key"] = Value::Null;
     native["signature"] = Value::Null;
-    let file = hnmod("0.2.0");
-
-    // Not by someone who isn't an owner.
-    mock.lock().unwrap().main.insert(
-        "mods/coords_hud.toml".into(),
-        published.replace("\"Alice\"", "\"bob\""),
-    );
-    let (status, json) = client.submit(&csrf, &native, &file).await;
-    assert_eq!(status, StatusCode::FORBIDDEN, "{json}");
-
-    mock.lock()
-        .unwrap()
-        .main
-        .insert("mods/coords_hud.toml".into(), published);
-    let (status, json) = client.submit(&csrf, &native, &file).await;
-    assert_eq!(status, StatusCode::OK, "{json}");
-    let text = {
-        let m = mock.lock().unwrap();
-        let (text, _, replaced) = &m.commits[&(
-            "submit/coords_hud-0.2.0".into(),
-            "mods/coords_hud.toml".into(),
-        )];
-        assert_eq!(replaced.as_deref(), Some("blob1"));
-        assert!(m.assets[0].0.ends_with(".hnmod"), "{:?}", m.assets);
-        let body = m.pulls[0]["body"].as_str().unwrap();
-        assert!(body.contains("(native-mod, update: turns native"), "{body}");
-        // Reviewed by hand: never merged as an owner update.
-        assert!(
-            !body.contains("owner-update") && m.labels.is_empty(),
-            "{body}"
-        );
-        text.clone()
-    };
-    let entry: Entry = toml::from_str(&text).unwrap();
-    assert_eq!(entry.kind.name(), "native-mod");
-    let files: Vec<&str> = entry.versions.iter().map(|v| v.file.as_str()).collect();
-    assert_eq!(files, ["coords_hud-0.2.0.hnmod", "coords_hud-0.1.0.hmod"]);
-
-    // Once native, never back.
-    mock.lock()
-        .unwrap()
-        .main
-        .insert("mods/coords_hud.toml".into(), text);
-    let wasm = std::fs::read(fixtures().join("coords_hud-0.1.0.hmod")).unwrap();
-    let (status, json) = client.submit(&csrf, &form(), &wasm).await;
+    let (status, json) = client.submit(&csrf, &native, &hmod("0.2.0")).await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{json}");
-    assert_eq!(
-        json["error"],
-        "coords_hud is a native-mod, not a mod: a project's kind never changes (only a mod may turn native-mod, once)"
-    );
+    assert_eq!(json["error"], "coords_hud: its kind can't change");
+    assert!(mock.lock().unwrap().pulls.is_empty());
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1324,4 +1341,211 @@ async fn an_owner_edits_the_page_without_a_version() {
     let csrf = client.sign_in().await;
     let (status, json) = edit(&mut client, &csrf, |f| f["tags"] = json!(["x"])).await;
     assert_eq!(status, StatusCode::FORBIDDEN, "{json}");
+}
+
+const BUILD_TARGET: &str = "x86_64-unknown-linux-gnu";
+const BUILD_BASE: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const BUILD_SHA: &str = "0000000000000000000000000000000000000000000000000000000000000000";
+
+impl Client {
+    async fn request_native_build(&mut self, base: &str) -> (StatusCode, Value) {
+        let body = json!({
+            "target": BUILD_TARGET,
+            "base": base,
+            "mods": [{"id": "native_example", "version": "1.0.0", "sha256": BUILD_SHA}],
+        });
+        let (status, json, _) = self
+            .send(
+                Request::post("/api/mods/native-builds")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await;
+        (status, json)
+    }
+}
+
+#[tokio::test]
+async fn native_dispatch_requires_exact_main_ancestry() {
+    let (mut client, mock) = setup().await;
+    mock.lock().unwrap().main.insert(
+        "mods/native_example.toml".into(),
+        format!(
+            r#"id = "native_example"
+kind = "native-mod"
+owners = ["alice"]
+
+[[versions]]
+version = "1.0.0"
+published = "2026-01-01"
+game = "26.3"
+file = "native_example.hmod"
+sha256 = "{BUILD_SHA}"
+"#
+        ),
+    );
+
+    let responses = [
+        (Some("behind"), Some(true), StatusCode::OK),
+        (Some("identical"), Some(true), StatusCode::OK),
+        (Some("behind"), Some(false), StatusCode::BAD_REQUEST),
+        (Some("ahead"), Some(true), StatusCode::BAD_REQUEST),
+        (Some("diverged"), Some(false), StatusCode::BAD_REQUEST),
+        (None, Some(true), StatusCode::BAD_GATEWAY),
+        (Some("behind"), None, StatusCode::BAD_GATEWAY),
+    ];
+    for (i, (comparison, exact, expected)) in responses.into_iter().enumerate() {
+        let base = format!("b{i:039x}");
+        let sha = exact.map(|exact| if exact { base.as_str() } else { BUILD_BASE });
+        mock.lock().unwrap().native_comparisons.insert(
+            base.clone(),
+            (
+                StatusCode::OK,
+                json!({"status": comparison, "merge_base_commit": {"sha": sha}}),
+            ),
+        );
+        let (status, body) = client.request_native_build(&base).await;
+        assert_eq!(status, expected, "{body}");
+        if expected == StatusCode::OK {
+            assert_eq!(body["status"], "queued");
+        }
+    }
+
+    // No comparison available and a refused provider request are both service failures.
+    let (status, _) = client.request_native_build(BUILD_BASE).await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    mock.lock().unwrap().native_comparisons.insert(
+        BUILD_BASE.into(),
+        (StatusCode::FORBIDDEN, json!({"message": "denied"})),
+    );
+    let (status, _) = client.request_native_build(BUILD_BASE).await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+
+    // A recent dispatch doesn't queue a second build or need another comparison.
+    let admitted = format!("b{:039x}", 0);
+    mock.lock().unwrap().native_comparisons.remove(&admitted);
+    let (status, body) = client.request_native_build(&admitted).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["status"], "queued");
+
+    let s = mock.lock().unwrap();
+    assert_eq!(s.native_checks, responses.len() + 2);
+    assert_eq!(
+        s.native_dispatches,
+        [0, 1].map(|i| {
+            json!({
+                "ref": "main",
+                "inputs": {
+                    "targets": BUILD_TARGET,
+                    "base": format!("b{i:039x}"),
+                    "mods": "native_example@1.0.0",
+                },
+            })
+        })
+    );
+}
+
+#[tokio::test]
+async fn native_cache_and_status_do_not_dispatch() {
+    use horizon_release_sign::native_build::{self, Mod, Request as BuildRequest};
+
+    let (mut client, mock) = setup().await;
+    let build = BuildRequest::new(
+        BUILD_TARGET,
+        BUILD_BASE,
+        vec![Mod {
+            id: "native_example".into(),
+            version: "1.0.0".into(),
+            sha256: BUILD_SHA.into(),
+        }],
+    )
+    .unwrap();
+    let key = build.key();
+    let tag = native_build::release_tag(BUILD_BASE);
+    let archive = native_build::archive(&key, BUILD_TARGET);
+    let uri = format!("/api/mods/native-builds?target={BUILD_TARGET}&base={BUILD_BASE}&key={key}");
+
+    let response = client
+        .app
+        .clone()
+        .oneshot(Request::get(uri).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let body: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["status"], "queued");
+
+    mock.lock().unwrap().native_release = Some((tag, archive));
+    let (status, body) = client.request_native_build(BUILD_BASE).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["status"], "ready");
+    assert_eq!(body["key"], key);
+
+    let s = mock.lock().unwrap();
+    assert_eq!(s.native_checks, 0);
+    assert!(s.native_dispatches.is_empty());
+}
+
+/// The limits count the TCP peer unless the service is told a proxy fronts it: a client reaching
+/// it directly cannot dodge its per-address cap by sending its own `CF-Connecting-IP`.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_forged_client_address_does_not_dodge_the_poll_limit() {
+    let (client, _) = setup().await;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let at = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(
+            listener,
+            client
+                .app
+                .into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .await
+        .unwrap()
+    });
+    let statuses = tokio::task::spawn_blocking(move || {
+        // A malformed base answers 400 once the limit let the request in.
+        (0..125)
+            .map(|n| {
+                let response = ureq::get(&format!(
+                    "http://{at}/api/native-builds?base=x&target=t&key=k"
+                ))
+                .set("CF-Connecting-IP", &format!("198.51.100.{n}"))
+                .call();
+                match response {
+                    Ok(r) => r.status(),
+                    Err(ureq::Error::Status(code, _)) => code,
+                    Err(e) => panic!("{e}"),
+                }
+            })
+            .collect::<Vec<_>>()
+    })
+    .await
+    .unwrap();
+    assert!(statuses[..120].iter().all(|s| *s == 400), "{statuses:?}");
+    assert!(statuses[120..].iter().all(|s| *s == 429), "{statuses:?}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_edit_of_a_malformed_id_never_reaches_github() {
+    let (mut client, mock) = setup().await;
+    let csrf = client.sign_in().await;
+    client.images.clear();
+    mock.lock().unwrap().requests.clear();
+    for id in [
+        "../../../../other/repo/contents/x",
+        "%2e%2e/%2e%2e/x",
+        "coords_hud?ref=x",
+        "coords_hud#",
+        "Coords_Hud",
+        "",
+    ] {
+        let (status, json) = edit(&mut client, &csrf, |f| f["id"] = json!(id)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{id:?}: {json}");
+    }
+    let m = mock.lock().unwrap();
+    assert!(m.requests.is_empty(), "{:?}", m.requests);
+    assert!(m.branches.is_empty());
 }
