@@ -1,4 +1,4 @@
-<!-- Generated from crates/horizon-server/src (the help text, config::TEMPLATE, api::ROUTES) by reference.rs; a test fails when this file is out of date. Update it with: HORIZON_WRITE_DOCS=1 cargo test -p horizon-server reference -->
+<!-- Generated from crates/horizon-server/src and crates/horizon-server-launch/src (the help text, config::TEMPLATE, api::ROUTES) by reference.rs; a test fails when this file is out of date. Update it with: HORIZON_WRITE_DOCS=1 cargo test -p horizon-server reference -->
 # Server reference
 
 Everything `horizon-server` offers a host or a tool: its commands, every `server.toml` key and the control API. How to host: [hosting.md](../hosting.md); the design: [server.md](../server.md); stability and versions: [stability.md](stability.md).
@@ -13,8 +13,8 @@ horizon-server: host a Horizon (Minecraft Java Edition 26.3) server
 Usage: horizon-server [--dir DIR] <command>
 
   init        Set up a server here: the EULA, the world, the port, who may join (asks, or takes flags:
-              --eula --world NAME --seed SEED --port N --whitelist/--no-whitelist --player NAME... --op NAME
-              --offline --yes)
+              --eula --world NAME --seed SEED --level-type ID --generator-settings JSON|@FILE --port N
+              --whitelist/--no-whitelist --player NAME... --op NAME --offline --yes)
   run         Run the server in the foreground; type console commands, Ctrl-C stops it cleanly. It
               restarts the game if it crashes.
   start       Run the server in the background, or resume a stopped supervisor (output goes to logs/supervisor.log)
@@ -54,8 +54,8 @@ Usage: horizon-server [--dir DIR] <command>
               The settings in server.toml
   config set KEY=VALUE... [--json]
               Change settings (for example world.difficulty=hard server.max_players=10), checked first;
-              a running server takes the difficulty, default game mode and whitelist at once, the rest
-              at its next start
+              a running server takes the difficulty, default game mode, whitelist, message of the day,
+              player limit and the backup and update settings at once, the rest at its next start
   import FILE Write server.toml from a vanilla server.properties
   import-resources DIR
               Copy game files prepared elsewhere (by the launcher or horizon-prepare) into place, after
@@ -91,6 +91,10 @@ Horizon server settings (docs/server.md). The server writes them into server.pro
 | `view_distance` | `10` | `view-distance` | chunks sent around each player |
 | `simulation_distance` | `10` | `simulation-distance` | chunks around each player where mobs, crops and redstone tick |
 | `max_view_distance` | `0` | `horizon-max-view-distance` | past view_distance, saved chunks only, up to this (never generated; 0: off) |
+| `max_viewed_loaded_chunks` | `2048` | `horizon-max-viewed-loaded-chunks` | chunks a mod may keep loaded for one player in another level (0: none; at most 4489, higher values lowered with a warning; an older Horizon client gets at most 2048) |
+| `max_viewed_ticking_chunks` | `441` | `horizon-max-viewed-ticking-chunks` | of them, ticking (one player's simulation area at distance 10) |
+| `max_viewed_loaded_chunks_per_level` | `16384` | `horizon-max-viewed-loaded-chunks-per-level` | the same for all players together, per level |
+| `max_viewed_ticking_chunks_per_level` | `3528` | `horizon-max-viewed-ticking-chunks-per-level` | ticking, all players together, per level |
 | `admin_feedback_to_ops` | `true` | `horizon-admin-feedback-to-ops` | operators see each other's commands ([name: ...], vanilla); false: only the log |
 | `accept_older_clients` | `false` | `horizon-accept-older-clients` | true: 26.2 clients join too, their packets translated (docs/hosting.md) |
 
@@ -103,6 +107,9 @@ Horizon server settings (docs/server.md). The server writes them into server.pro
 | `game_mode` | `"survival"` | `gamemode` | survival, creative, adventure or spectator |
 | `difficulty` | `"easy"` | `difficulty` | peaceful, easy, normal or hard |
 | `hardcore` | `false` | `hardcore` | one life: a player who dies becomes a spectator |
+| `level_type` | `"minecraft:normal"` | `level-type` | a new world's preset: minecraft:flat, large_biomes, amplified, single_biome_surface |
+| `generator_settings` | `"{}"` | `generator-settings` | a JSON object; minecraft:flat reads its layers and biome from it |
+| `generate_structures` | `true` | `generate-structures` | villages, temples, strongholds and the like in a new world |
 
 ### `[properties]`
 
@@ -190,11 +197,11 @@ HTTP and JSON on 127.0.0.1. A running server writes its address and a random tok
 | `GET` | `/api/v1/backups/download` | `?name=<file>` | the zip | Download a backup |
 | `GET` | `/api/v1/crash-reports` | nothing | `{"reports": [{"name", "bytes"}]}`, newest first (the `.txt` files in `crash-reports/`) | List the game's crash reports |
 | `GET` | `/api/v1/crash-reports/read` | `?name=<file>` (a name `crash-reports` lists) | the report's text (`text/plain`) | Read one crash report |
-| `POST` | `/api/v1/restore` | `{"name": "<backup>", "dimension": "minecraft:the_nether"}` (`dimension` optional) | `{"name": "<backup>", "dimension": "<id>" or null}` | Restart the game with that backup's world, or only one dimension of it (what it replaces is kept in backups/) |
+| `POST` | `/api/v1/restore` | `{"name": "<backup>", "dimension": "minecraft:the_nether"}` (`name` must be a nonblank string; `dimension` is optional) | `{"name": "<backup>", "dimension": "<id>" or null}`; `400` if no backup name is given | Restart the game with that backup's world, or only one dimension of it (what it replaces is kept in backups/) |
 | `POST` | `/api/v1/update` | `{"tag": "...", "timeout": seconds}` (both optional) | `{"ok": true}`; `status` says how it went (`update`) | Restart on that installed release, or download the newest first; goes back if the game isn't up within the timeout |
 | `GET` | `/api/v1/metrics/prometheus` | nothing | the latest sample as Prometheus text: `horizon_up`, `horizon_tps`, `horizon_mspt{stat}`, `horizon_players_online`, `horizon_memory_rss_bytes`, `horizon_loaded_chunks{dimension}` and `horizon_entities{dimension}` (players and block entities apart)... | Metrics for a monitoring tool to scrape |
 | `GET` | `/api/v1/players` | nothing | `online` (name, uuid, address, ping_ms, dimension, position, op_level), `max_players`, `ops`, `whitelist` (`enabled`, `players`), `bans`, `ip_bans` (with reason, source, created, expires) | Who is online, and vanilla's lists |
-| `GET` | `/api/v1/mods` | nothing | `engine` (`found`, `target`, `base`, `horizon`, `hooks`) and `native` (id, version, sha256), from the `native-mods.json` the launcher wrote beside the game program | The native mods the server's game program was built with |
+| `GET` | `/api/v1/mods` | nothing | `mods` (id, version) from the running engine's LoadedMods inventory; `provenance` contains `engine` (found, target, base, horizon, hooks) and `native` (id, version, sha256) from the configured program's native-mods.json. 409 when the runtime inventory is unavailable | The packages loaded by the running server, with build provenance separate |
 | `POST` | `/api/v1/players/kick` | `{"name", "reason"}` (reason optional) | `{"changed": bool, "output": [...]}`: whether the list (or who is online) changed, and the console's lines | Kick an online player |
 | `POST` | `/api/v1/players/ban` | `{"name", "reason"}` (reason optional) | `{"changed": bool, "output": [...]}`: whether the list (or who is online) changed, and the console's lines | Ban a player (kicked if online) |
 | `POST` | `/api/v1/players/pardon` | `{"name"}` | `{"changed": bool, "output": [...]}`: whether the list (or who is online) changed, and the console's lines | Lift a player's ban |

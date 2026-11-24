@@ -4,6 +4,8 @@
 //! Horizon Settings > PvP & HUD. Every option is off by default, so the game looks like
 //! vanilla until the player changes one, and none of them shows anything vanilla doesn't
 //! already tell the player.
+/// What the renderer reads of these options each frame (`gfx::Frame::look`), through the look.
+pub use horizon_hooks::look::Frame;
 use horizon_hooks::look::Look;
 
 /// Colours the PvP options pick from. `Inverted` is vanilla's crosshair blend: the colour
