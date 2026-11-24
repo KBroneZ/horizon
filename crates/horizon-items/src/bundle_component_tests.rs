@@ -1,7 +1,7 @@
 //! `BundleItem` acts on the item **and** its `bundle_contents` component;
 //! `BundleContents.getWeight` on the component alone.
 use super::*;
-use horizon_world::nbt::Tag;
+use horizon_core::nbt::Tag;
 
 fn removed(item: &str) -> ItemStack {
     let mut stack = ItemStack::new(item, 1);
@@ -19,6 +19,45 @@ fn holding(item: &str, inside: &[(&str, u32)]) -> ItemStack {
         .map(|(item, n)| ItemStack::new(item, *n))
         .collect();
     stack
+}
+
+#[test]
+fn a_saved_bundle_releases_stacks_against_the_world_prototypes() {
+    let ore = "minecraft:iron_ore";
+    let mut items = Items::empty();
+    items.items.insert(
+        "minecraft:bundle".into(),
+        crate::items::ItemInfo {
+            bundle: true,
+            max_stack: 1,
+            ..Default::default()
+        },
+    );
+    items.items.insert(
+        ore.into(),
+        crate::items::ItemInfo {
+            max_stack: 64,
+            components: vec!["minecraft:max_stack_size".into()],
+            ..Default::default()
+        },
+    );
+    items.component_defaults = std::sync::Arc::new(std::collections::HashMap::from([(
+        ore.to_owned(),
+        [("minecraft:max_stack_size".into(), Tag::Int(64))]
+            .into_iter()
+            .collect(),
+    )]));
+    let bundle = crate::item_data::parse_stack(
+        r#"{id:"minecraft:bundle",components:{"minecraft:bundle_contents":[{id:"minecraft:iron_ore",count:3,components:{"minecraft:max_stack_size":64}},{id:"minecraft:iron_ore",components:{"minecraft:max_stack_size":16}}]}}"#,
+    )
+    .unwrap()
+    .unwrap();
+
+    let mut contents = Contents::of(&items, &bundle).unwrap();
+    let removed = contents.remove_one(&items).unwrap();
+    assert!(removed.matches(&ItemStack::new(ore, 3)));
+    let overridden = contents.remove_one(&items).unwrap();
+    assert_eq!(overridden.max_stack_size(&items), 16);
 }
 
 #[test]

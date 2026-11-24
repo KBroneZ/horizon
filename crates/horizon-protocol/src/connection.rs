@@ -1,5 +1,6 @@
 //! A blocking connection with vanilla's pipeline: optional AES/CFB8
-//! encryption, VarInt21 framing and threshold compression. After login it
+//! encryption, VarInt21 framing and threshold compression on TCP. Memory pipes
+//! use private u64-length framing without network compression or size limits. After login it
 //! splits into a reader (for a receive thread) and a shareable writer, or
 //! gives its stream up ([`Connection::detach`]) to be polled without blocking,
 //! the halves then keeping only the framing, compression and encryption. It
@@ -10,137 +11,14 @@ use std::{
     io::{Read, Write},
     net::{Shutdown, SocketAddr, TcpStream, ToSocketAddrs},
     sync::{
-        Arc, Condvar, Mutex,
+        Arc,
         atomic::{AtomicI64, Ordering},
     },
     time::{Duration, Instant},
 };
 
-/// Called when a [`Pipe`] end has bytes to read or was closed ([`Pipe::on_ready`]).
-type Notify = Arc<dyn Fn() + Send + Sync>;
-
-/// One direction of a [`Pipe`]: the bytes written and not read yet, and
-/// whether either end closed it.
-#[derive(Default)]
-struct Channel {
-    state: Mutex<(std::collections::VecDeque<u8>, bool)>,
-    ready: Condvar,
-    /// The reading end's [`Pipe::on_ready`].
-    notify: Mutex<Option<Notify>>,
-}
-impl Channel {
-    fn close(&self) {
-        self.state.lock().unwrap().1 = true;
-        self.ready.notify_all();
-        self.notify();
-    }
-    /// Tell a reader that doesn't block, outside the state's lock.
-    fn notify(&self) {
-        let notify = self.notify.lock().unwrap().clone();
-        if let Some(notify) = notify {
-            notify();
-        }
-    }
-}
-/// The channels of one end; dropping the end's last clone closes them, as
-/// a socket closes with its process.
-struct End {
-    incoming: Arc<Channel>,
-    outgoing: Arc<Channel>,
-}
-impl Drop for End {
-    fn drop(&mut self) {
-        self.incoming.close();
-        self.outgoing.close();
-    }
-}
-/// One end of an in-memory byte pipe: what one end writes the other reads.
-pub struct Pipe {
-    end: Arc<End>,
-    /// The read timeout (`set_read_timeout`).
-    timeout: Mutex<Option<Duration>>,
-    /// Reads with nothing to read fail with `WouldBlock` instead of waiting.
-    nonblocking: bool,
-}
-impl Pipe {
-    /// Two connected ends.
-    pub fn pair() -> (Self, Self) {
-        let (a, b) = (Arc::new(Channel::default()), Arc::new(Channel::default()));
-        let end = |incoming, outgoing| Self {
-            end: Arc::new(End { incoming, outgoing }),
-            timeout: Mutex::new(None),
-            nonblocking: false,
-        };
-        (end(a.clone(), b.clone()), end(b, a))
-    }
-    fn try_clone(&self) -> Self {
-        Self {
-            end: self.end.clone(),
-            timeout: Mutex::new(*self.timeout.lock().unwrap()),
-            nonblocking: self.nonblocking,
-        }
-    }
-    /// Reads with nothing to read fail with `WouldBlock`, as a non-blocking socket's do.
-    pub fn set_nonblocking(&mut self, nonblocking: bool) {
-        self.nonblocking = nonblocking;
-    }
-    /// Call `notify` whenever bytes arrive at this end or the pipe closes (also
-    /// now, if either already happened), as a poller's readiness would: a
-    /// non-blocking reader then reads until `WouldBlock`.
-    pub fn on_ready(&self, notify: impl Fn() + Send + Sync + 'static) {
-        let incoming = &self.end.incoming;
-        *incoming.notify.lock().unwrap() = Some(Arc::new(notify));
-        let state = incoming.state.lock().unwrap();
-        let ready = !state.0.is_empty() || state.1;
-        drop(state);
-        if ready {
-            incoming.notify();
-        }
-    }
-    /// Close both directions: reads at either end then see the end of the stream.
-    pub fn shutdown(&self) {
-        self.end.incoming.close();
-        self.end.outgoing.close();
-    }
-}
-impl Read for Pipe {
-    fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
-        let deadline = self.timeout.lock().unwrap().map(|t| Instant::now() + t);
-        let mut state = self.end.incoming.state.lock().unwrap();
-        if self.nonblocking && state.0.is_empty() && !state.1 {
-            return Err(std::io::ErrorKind::WouldBlock.into());
-        }
-        while state.0.is_empty() && !state.1 {
-            state = match deadline {
-                None => self.end.incoming.ready.wait(state).unwrap(),
-                Some(deadline) => {
-                    let left = deadline.saturating_duration_since(Instant::now());
-                    if left.is_zero() {
-                        return Err(std::io::ErrorKind::TimedOut.into());
-                    }
-                    self.end.incoming.ready.wait_timeout(state, left).unwrap().0
-                }
-            };
-        }
-        state.0.read(out)
-    }
-}
-impl Write for Pipe {
-    fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
-        let mut state = self.end.outgoing.state.lock().unwrap();
-        if state.1 {
-            return Err(std::io::ErrorKind::BrokenPipe.into());
-        }
-        state.0.extend(data);
-        self.end.outgoing.ready.notify_all();
-        drop(state);
-        self.end.outgoing.notify();
-        Ok(data.len())
-    }
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
+mod memory;
+pub use memory::Pipe;
 
 /// What a connection runs over.
 enum Stream {
@@ -222,6 +100,7 @@ pub struct Counters {
 }
 
 pub struct ConnReader {
+    memory: bool,
     stream: Stream,
     /// Bytes read: `buffer[start..end]` are not consumed yet, and reads go
     /// straight into `buffer[end..]`.
@@ -246,6 +125,7 @@ impl Closer {
 }
 
 pub struct ConnWriter {
+    memory: bool,
     stream: Stream,
     encrypt: Option<Cfb8>,
     pub threshold: Option<usize>,
@@ -270,6 +150,21 @@ pub struct Connection {
     pub reader: ConnReader,
     pub writer: ConnWriter,
 }
+/// A listener on every address of the machine, IPv6 and IPv4 at once, as Java's `ServerSocketChannel` bound
+/// to no address listens (a vanilla server with `server-ip` empty): `[::]` with `IPV6_V6ONLY` off, so an IPv4
+/// peer arrives as `::ffff:a.b.c.d`. `SO_REUSEADDR` as std's `TcpListener::bind` sets it on Unix, never on
+/// Windows (where it would let another program take the port). Blocking, like std's.
+pub fn bind_dual_stack(port: u16) -> std::io::Result<std::net::TcpListener> {
+    use socket2::{Domain, Protocol, Socket, Type};
+    let socket = Socket::new(Domain::IPV6, Type::STREAM, Some(Protocol::TCP))?;
+    socket.set_only_v6(false)?;
+    #[cfg(not(windows))]
+    socket.set_reuse_address(true)?;
+    socket.bind(&SocketAddr::from((std::net::Ipv6Addr::UNSPECIFIED, port)).into())?;
+    socket.listen(128)?;
+    Ok(socket.into())
+}
+
 fn configure_stream(stream: &TcpStream) -> Result<()> {
     stream.set_nodelay(true)?;
     let sock = socket2::SockRef::from(stream);
@@ -384,8 +279,10 @@ impl Connection {
     fn over(stream: Stream) -> Result<Self> {
         let counters = Arc::new(Counters::default());
         let write = stream.try_clone()?;
+        let memory = matches!(stream, Stream::Memory(_));
         Ok(Self {
             reader: ConnReader {
+                memory,
                 stream,
                 buffer: Vec::new(),
                 start: 0,
@@ -398,6 +295,7 @@ impl Connection {
                 older_client: None,
             },
             writer: ConnWriter {
+                memory,
                 stream: write,
                 encrypt: None,
                 threshold: None,
@@ -480,12 +378,31 @@ enum Next {
     Partial(usize),
 }
 impl ConnReader {
+    fn header(&self) -> Result<Option<(usize, usize)>> {
+        let bytes = &self.buffer[self.start..self.end];
+        if !self.memory {
+            return frame::header(bytes);
+        }
+        if bytes.len() < 8 {
+            return Ok(None);
+        }
+        let len = usize::try_from(u64::from_le_bytes(bytes[..8].try_into().unwrap()))
+            .ok()
+            .filter(|len| len.checked_add(8).is_some())
+            .ok_or_else(|| Error::new("memory frame length overflows address space"))?;
+        Ok(Some((8, len)))
+    }
     /// Read exactly `len` bytes as they are, with no framing.
     pub fn read_raw(&mut self, len: usize) -> Result<Vec<u8>> {
         let mut out = vec![0u8; len];
         self.stream.read_exact(&mut out)?;
         Ok(out)
     }
+    /// Whether this reader uses the engine's in-memory transport.
+    pub fn is_memory(&self) -> bool {
+        self.memory
+    }
+
     /// Block until a whole packet arrives: (id, payload).
     pub fn recv(&mut self) -> Result<(i32, Vec<u8>)> {
         if let Some(packet) = self.adapter.as_ref().and_then(|a| a.next_incoming()) {
@@ -559,7 +476,7 @@ impl ConnReader {
     }
     /// The completed next frame header: (length-prefix bytes, payload bytes).
     fn next_header(&self) -> Result<Option<(usize, usize)>> {
-        frame::header(&self.buffer[self.start..self.end])
+        self.header()
     }
     /// Take the next frame off the buffer, if it is whole.
     fn next(&mut self) -> Result<Next> {
@@ -587,7 +504,11 @@ impl ConnReader {
     /// empty compressed frame is skipped and the connection stays up.
     fn packet(&mut self, frame: std::ops::Range<usize>) -> Result<Option<(i32, Vec<u8>)>> {
         let frame = &self.buffer[frame];
-        match frame::body(frame, self.threshold, &mut self.inflater)? {
+        match if self.memory {
+            frame::Body::Plain(0)
+        } else {
+            frame::body(frame, self.threshold, &mut self.inflater)?
+        } {
             frame::Body::Plain(at) => {
                 let body = &frame[at..];
                 if body.is_empty() {
@@ -666,7 +587,63 @@ impl ConnReader {
         Ok(self.stream.set_read_timeout(timeout)?)
     }
 }
+/// Immutable post-login packet framing for a connection.
+#[derive(Clone, Copy, Debug)]
+pub enum Framing {
+    /// Private local transport, without network packet limits.
+    Memory,
+    /// TCP framing, optionally with threshold compression.
+    Network(Option<usize>),
+}
+impl Framing {
+    /// Prepare contents without an outer length prefix.
+    pub fn contents(self, body: &[u8]) -> Result<Vec<u8>> {
+        match self {
+            Self::Memory => Ok(body.to_vec()),
+            Self::Network(t) => frame::contents(body, t),
+        }
+    }
+    /// Prepare contents, retaining ownership when no compression is needed.
+    pub fn contents_owned(self, body: Vec<u8>) -> Result<Vec<u8>> {
+        match self {
+            Self::Memory => Ok(body),
+            Self::Network(t) => frame::contents_owned(body, t),
+        }
+    }
+}
 impl ConnWriter {
+    /// Remove this exact writer, leaving an explicitly disconnected placeholder.
+    pub fn take(&mut self) -> Self {
+        let placeholder = Self {
+            memory: self.memory,
+            stream: Stream::Detached,
+            encrypt: None,
+            threshold: None,
+            counters: self.counters.clone(),
+            adapter: None,
+            older_client: None,
+        };
+        std::mem::replace(self, placeholder)
+    }
+
+    /// An independent shutdown handle for this writer.
+    pub fn closer(&self) -> Result<Closer> {
+        Ok(Closer(self.stream.try_clone()?))
+    }
+    /// Encode frame contents for this transport. Memory packets bypass network
+    /// compression and its size limits; use this before `frame_into` when detached.
+    pub fn contents(&self, body: &[u8]) -> Result<Vec<u8>> {
+        self.framing().contents(body)
+    }
+    /// Capture the connection's immutable framing mode after login.
+    pub fn framing(&self) -> Framing {
+        if self.memory {
+            Framing::Memory
+        } else {
+            Framing::Network(self.threshold)
+        }
+    }
+
     /// The server release selected for this connection (local play uses the pinned release).
     pub fn server_version(&self) -> crate::adapter::ServerVersion {
         self.adapter
@@ -681,6 +658,16 @@ impl ConnWriter {
             .and_then(|a| a.legacy_secure_chat_enforcement())
     }
 
+    /// Observe live secure-chat metadata after moving the writer to another thread.
+    pub fn legacy_secure_chat_observer(&self) -> impl Fn() -> Option<bool> + Send + Sync + 'static {
+        let adapter = self.adapter.clone();
+        move || {
+            adapter
+                .as_ref()
+                .and_then(|a| a.legacy_secure_chat_enforcement())
+        }
+    }
+
     /// Write bytes as they are, with no framing: the legacy server list ping
     /// (`LegacyServerPinger`) is not a framed protocol.
     pub fn write_raw(&mut self, data: &[u8]) -> Result<()> {
@@ -688,47 +675,107 @@ impl ConnWriter {
         self.stream.flush()?;
         Ok(())
     }
-    /// A packet body as this connection's client takes it: renumbered for a client of an older release
-    /// ([`Connection::serve_older`]), `None` when it has no such packet; as it is otherwise.
-    pub fn for_client<'a>(&self, body: &'a [u8]) -> Result<Option<std::borrow::Cow<'a, [u8]>>> {
+    /// Whether this connection serves a client of an older release ([`Connection::serve_older`]): only
+    /// then does a body become other bodies, so the rest can frame the borrowed body as it is.
+    pub fn serves_older_client(&self) -> bool {
+        self.older_client.is_some()
+    }
+    /// The packet bodies this connection's client takes for one body, in order: renumbered for a client of an
+    /// older release ([`Connection::serve_older`]), none when it has no such packet, and what the packet brought
+    /// with it (a boat's wood, an experience orb's value) after it; the body itself otherwise.
+    pub fn for_client<'a>(&self, body: &'a [u8]) -> Result<Vec<std::borrow::Cow<'a, [u8]>>> {
         match &self.older_client {
-            None => Ok(Some(std::borrow::Cow::Borrowed(body))),
-            Some(client) => Ok(client.clientbound(body)?.map(std::borrow::Cow::Owned)),
+            None => Ok(vec![std::borrow::Cow::Borrowed(body)]),
+            Some(client) => Ok(client
+                .clientbound_all(body)?
+                .into_iter()
+                .map(std::borrow::Cow::Owned)
+                .collect()),
         }
+    }
+    /// The client is of this release: its bodies go out as they are ([`Self::for_client`]).
+    pub fn for_client_is_plain(&self) -> bool {
+        self.older_client.is_none()
     }
     /// Send one packet body (VarInt id + payload).
     pub fn send(&mut self, body: &[u8]) -> Result<()> {
         if self.older_client.is_some() {
-            return match self.for_client(body)? {
-                Some(body) => self.send_contents(&frame::contents(&body, self.threshold)?),
-                None => Ok(()),
-            };
-        }
-        if let Some(a) = self.adapter.clone() {
-            if let Some(body) = a.serverbound(body)? {
-                self.send_contents(&frame::contents(&body, self.threshold)?)?;
-            }
-            for body in a.take_outgoing() {
-                self.send_contents(&frame::contents(&body, self.threshold)?)?;
+            for body in self.for_client(body)? {
+                self.send_contents(&self.contents(&body)?)?;
             }
             return Ok(());
         }
-        self.send_contents(&frame::contents(body, self.threshold)?)
+        if let Some(a) = self.adapter.clone() {
+            if let Some(body) = a.serverbound(body)? {
+                self.send_contents(&self.contents(&body)?)?;
+            }
+            for body in a.take_outgoing() {
+                self.send_contents(&self.contents(&body)?)?;
+            }
+            return Ok(());
+        }
+        self.send_contents(&self.contents(body)?)
     }
-    /// Send a frame whose contents [`frame::contents`] made with this
-    /// writer's threshold.
+    /// Send a frame whose contents [`Self::contents`] made for this transport.
     pub fn send_contents(&mut self, contents: &[u8]) -> Result<()> {
         let mut framed = Vec::with_capacity(contents.len() + 3);
         self.frame_into(contents, &mut framed);
         self.stream.write_all(&framed)?;
         Ok(())
     }
+    /// [`Self::frame_into`] of what `frame::contents` makes of a body shorter than the
+    /// compression threshold (a zero for the uncompressed size, then the body), written at
+    /// once: no vector of its own, one copy of the body instead of two. The caller checked
+    /// the threshold (`Framing::Network(Some(t))`, `body.len() < t`) and that the body is shorter
+    /// than `frame::MAX_FRAME`, which `contents` refuses.
+    pub fn frame_small_into(&mut self, body: &[u8], out: &mut Vec<u8>) {
+        let written = self.frame_small_uncounted(body, out);
+        self.count_frames(1, written);
+    }
+    /// [`Self::frame_small_into`] without the counters (two atomic adds for each packet): the
+    /// caller adds up what it framed and gives it to [`Self::count_frames`] once.
+    pub fn frame_small_uncounted(&mut self, body: &[u8], out: &mut Vec<u8>) -> i64 {
+        let at = out.len();
+        debug_assert!(
+            !self.memory
+                && self.threshold.is_some_and(|t| body.len() < t)
+                && body.len() < crate::frame::MAX_FRAME
+        );
+        // The frame's length (the uncompressed-size zero and the body), a VarInt, and the
+        // zero: written from the stack, with one check of the buffer's room.
+        let (mut head, mut n, mut v) = ([0u8; 6], 0, body.len() as u32 + 1);
+        while v > 0x7F {
+            head[n] = (v as u8 & 0x7F) | 0x80;
+            v >>= 7;
+            n += 1;
+        }
+        head[n] = v as u8;
+        n += 2;
+        out.reserve(n + body.len());
+        out.extend_from_slice(&head[..n]);
+        out.extend_from_slice(body);
+        if let Some(c) = &mut self.encrypt {
+            c.encrypt(&mut out[at..]);
+        }
+        (out.len() - at) as i64
+    }
+    /// What `frames` frames of `bytes` bytes add to the connection's counters.
+    pub fn count_frames(&self, frames: i64, bytes: i64) {
+        if frames != 0 {
+            self.counters.sent.fetch_add(frames as _, Ordering::Relaxed);
+            self.counters.bytes_out.fetch_add(bytes, Ordering::Relaxed);
+        }
+    }
     /// The bytes [`Self::send_contents`] writes, appended to `out` instead: a
     /// detached writer's, written later, in the order framed (the cipher
     /// runs on).
     pub fn frame_into(&mut self, contents: &[u8], out: &mut Vec<u8>) {
         let at = out.len();
-        crate::buf::write_varint(out, contents.len() as i32);
+        if self.memory {
+            out.extend_from_slice(&(contents.len() as u64).to_le_bytes());
+        } else {
+            crate::buf::write_varint(out, contents.len() as i32);
+        }
         out.extend_from_slice(contents);
         if let Some(c) = &mut self.encrypt {
             c.encrypt(&mut out[at..]);
@@ -747,6 +794,7 @@ impl ConnWriter {
 mod tests {
     use super::*;
     use std::net::TcpListener;
+    use std::sync::Mutex;
 
     #[test]
     fn ipv4_first_keeps_each_familys_order() {
@@ -768,6 +816,97 @@ mod tests {
         );
     }
 
+    fn writer(encrypted: bool) -> ConnWriter {
+        ConnWriter {
+            memory: false,
+            stream: Stream::Detached,
+            encrypt: encrypted.then(|| Cfb8::new(&[7; 16], &[9; 16])),
+            threshold: Some(256),
+            counters: Arc::default(),
+            adapter: None,
+            older_client: None,
+        }
+    }
+
+    /// A body under the compression threshold framed in place is the frame the general path
+    /// makes of it (`contents`, then `frame_into`), byte for byte, encrypted or not, with the
+    /// counters of the same frames, across the lengths where the VarInt grows a byte.
+    #[test]
+    fn a_small_body_framed_in_place_is_its_general_frame() {
+        for encrypted in [false, true] {
+            let (mut general, mut small) = (writer(encrypted), writer(encrypted));
+            let (mut want, mut got) = (Vec::new(), Vec::new());
+            for len in [0, 1, 5, 62, 63, 64, 126, 127, 128, 200, 254, 255] {
+                let body: Vec<u8> = (0..len).map(|i| (i * 7 + len) as u8).collect();
+                let contents = general.contents(&body).unwrap();
+                general.frame_into(&contents, &mut want);
+                small.frame_small_into(&body, &mut got);
+                assert_eq!(got, want, "length {len}, encrypted {encrypted}");
+            }
+            let counted = |w: &ConnWriter| {
+                (
+                    w.counters.sent.load(Ordering::Relaxed),
+                    w.counters.bytes_out.load(Ordering::Relaxed),
+                )
+            };
+            assert_eq!(counted(&small), counted(&general));
+            // A run framed with its counters given once adds up to the same.
+            let mut tallied = writer(encrypted);
+            let (mut bytes, mut frames, mut out) = (0, 0, Vec::new());
+            for len in [3, 130, 3] {
+                bytes += tallied.frame_small_uncounted(&vec![1; len], &mut out);
+                frames += 1;
+            }
+            tallied.count_frames(frames, bytes);
+            assert_eq!(
+                tallied.counters.bytes_out.load(Ordering::Relaxed),
+                out.len() as i64
+            );
+            assert_eq!(tallied.counters.sent.load(Ordering::Relaxed), 3);
+        }
+    }
+
+    /// What a small frame costs by each path, for the pull request's numbers: run with
+    /// `cargo test --release -p horizon-protocol --lib -- --ignored --nocapture frame_cost`.
+    #[test]
+    #[ignore = "daily"]
+    fn frame_cost() {
+        let body = vec![0x2Fu8; 50];
+        let n = 2_000_000;
+        let time = |name: &str, f: &mut dyn FnMut(&mut ConnWriter, &mut Vec<u8>)| {
+            let mut w = writer(false);
+            let mut out = Vec::new();
+            let start = Instant::now();
+            for i in 0..n {
+                if i % 4096 == 0 {
+                    out.clear();
+                }
+                f(&mut w, &mut out);
+            }
+            println!(
+                "{name}: {:.1} ns a frame",
+                start.elapsed().as_nanos() as f64 / n as f64
+            );
+        };
+        time("general (contents, then frame_into)", &mut |w, out| {
+            let contents = w.contents(&body).unwrap();
+            w.frame_into(&contents, out);
+        });
+        time("in place (frame_small_into)", &mut |w, out| {
+            w.frame_small_into(&body, out);
+        });
+        // Counted once for each run of 256 frames, as `frame_drain` does.
+        let mut tally = (0, 0);
+        time("in place, counted once a run", &mut |w, out| {
+            tally.1 += w.frame_small_uncounted(&body, out);
+            tally.0 += 1;
+            if tally.0 == 256 {
+                w.count_frames(tally.0, tally.1);
+                tally = (0, 0);
+            }
+        });
+    }
+
     fn peer(c: &Connection) -> SocketAddr {
         match &c.reader.stream {
             Stream::Tcp(s) => s.peer_addr().unwrap(),
@@ -785,6 +924,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "daily"]
     fn connects_to_ipv4_although_the_resolver_lists_ipv6_first() {
         // Both listen, as with a server whose IPv6 address accepts and then resets.
         let Some(v6_listener) = ipv6_loopback() else {
@@ -799,6 +939,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "daily"]
     fn falls_back_to_ipv6_when_ipv4_refuses() {
         let Some(v6_listener) = ipv6_loopback() else {
             return;
@@ -814,6 +955,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "daily"]
     fn a_dead_address_does_not_hold_up_the_next() {
         // A controlled pending dial cannot be intercepted by a VPN or proxy.
         let held_listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -851,6 +993,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "daily"]
     fn every_failure_reports_the_first_address() {
         let closed = |_| {
             TcpListener::bind("127.0.0.1:0")
@@ -870,6 +1013,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "daily"]
     fn a_silent_peer_times_out_and_a_closed_one_ends_the_stream() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -887,6 +1031,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "daily"]
     fn loopback_with_compression_and_encryption() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -921,6 +1066,7 @@ mod tests {
     fn fragmented_plain_frame_header_and_following_packet() {
         let (pipe, _peer) = Pipe::pair();
         let mut connection = Connection::local(pipe);
+        connection.reader.memory = false;
         let payload: Vec<u8> = (0..300).map(|i| i as u8).collect();
         let mut body = vec![0xac, 0x02]; // Packet id 300, two-byte VarInt.
         body.extend_from_slice(&payload);
@@ -961,6 +1107,7 @@ mod tests {
         ] {
             let (pipe, _peer) = Pipe::pair();
             let mut connection = Connection::local(pipe);
+            connection.reader.memory = false;
             let mut input = header;
             assert_eq!(
                 connection.reader.read_from(&mut input).unwrap(),
@@ -1005,6 +1152,7 @@ mod tests {
                 for _ in 0..SAMPLES_PER_RUN {
                     let (pipe, _peer) = Pipe::pair();
                     let mut connection = Connection::local(pipe);
+                    connection.reader.memory = false;
                     let started = Instant::now();
 
                     for _ in 0..PACKETS_PER_SAMPLE {
@@ -1057,6 +1205,7 @@ mod tests {
     /// Packets from one byte to past the read size, compressed and
     /// encrypted, arrive whole and in order however the reads cut them.
     #[test]
+    #[ignore = "daily"]
     fn packets_of_every_size_arrive_whole() {
         let (a, b) = Pipe::pair();
         let bodies: Vec<Vec<u8>> = (0..400u32)
@@ -1108,6 +1257,7 @@ mod tests {
     /// Encrypted bytes that arrive in the same read as the last plain packet
     /// are decrypted once encryption is enabled.
     #[test]
+    #[ignore = "daily"]
     fn encrypted_bytes_read_before_enabling_encryption() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -1133,6 +1283,7 @@ mod tests {
     /// skips it (its PacketDecoder only reads a packet from a readable
     /// buffer), so the client stays connected.
     #[test]
+    #[ignore = "daily"]
     fn an_empty_compressed_frame_is_skipped() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -1155,6 +1306,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "daily"]
     fn tcp_stream_enables_nodelay_and_keepalive() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();

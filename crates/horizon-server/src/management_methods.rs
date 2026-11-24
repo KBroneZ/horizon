@@ -1,7 +1,7 @@
 //! The methods of vanilla's management protocol (`management.rs`), as vanilla 26.3's `methods/*Service` answer
 //! them: the players, the server's state, and the lists. Kicks, saves and messages go through the game's
 //! console, so they log and save as an operator's command would; the lists change through the game's
-//! `management` request (game/dedicated/management.rs), which finds the players and sends the shut-out away as
+//! `management` request (game/interface/dedicated/management.rs), which finds the players and sends the shut-out away as
 //! vanilla's services do.
 
 use crate::{
@@ -10,6 +10,7 @@ use crate::{
     management::{self, Failure, INTERNAL_ERROR, invalid_params},
 };
 use horizon_platform::server_files::properties::{ServerProperties, SystemEntropy};
+use horizon_server_launch::config;
 use serde_json::{Value, json};
 use std::path::Path;
 
@@ -446,6 +447,10 @@ fn component(message: &Value) -> Option<Value> {
 /// old one when the heartbeat cannot be rescheduled (`management::set_heartbeat_seconds`), which keeps
 /// nothing.
 fn status_heartbeat_interval(shared: &Shared, seconds: i32) -> Result<Value, Failure> {
+    let path = shared.dir.join(crate::config::PROPERTIES);
+    let stored = ServerProperties::from_file(&path, &mut SystemEntropy::default())
+        .and_then(|p| p.update("status-heartbeat-interval", seconds.to_string()))
+        .map_err(|e| (INTERNAL_ERROR, Some(e)))?;
     if !management::set_heartbeat_seconds(shared, seconds) {
         crate::supervisor::note(
             shared,
@@ -463,10 +468,6 @@ fn status_heartbeat_interval(shared: &Shared, seconds: i32) -> Result<Value, Fai
         );
         return Ok(json!(management::heartbeat_seconds(shared)));
     }
-    let path = shared.dir.join(crate::config::PROPERTIES);
-    let stored = ServerProperties::from_file(&path, &mut SystemEntropy::default())
-        .and_then(|p| p.update("status-heartbeat-interval", seconds.to_string()))
-        .map_err(|e| (INTERNAL_ERROR, Some(e)))?;
     stored
         .store(&path)
         .map_err(|e| (INTERNAL_ERROR, Some(e.to_string())))?;
@@ -542,7 +543,7 @@ impl Game<'_> {
                 "enforce_allowlist" => "enforce_whitelist",
                 _ => unreachable!("allowlist setting is validated by its callers"),
             };
-            crate::config::update(
+            config::update(
                 &self.shared.dir,
                 "properties",
                 property,
@@ -597,7 +598,7 @@ impl Game<'_> {
             return Err((INTERNAL_ERROR, Some(error.to_owned())));
         }
         if let Some(value) = value {
-            crate::config::update(
+            config::update(
                 &self.shared.dir,
                 "properties",
                 "pause-when-empty-seconds",
@@ -620,7 +621,7 @@ impl Game<'_> {
             return Err((INTERNAL_ERROR, Some(error.to_owned())));
         }
         if let Some(value) = value {
-            crate::config::update(
+            config::update(
                 &self.shared.dir,
                 "properties",
                 "force-gamemode",
@@ -666,7 +667,7 @@ impl Game<'_> {
             return Err((INTERNAL_ERROR, Some(error.to_owned())));
         }
         if let Some(value) = value {
-            crate::config::update(
+            config::update(
                 &self.shared.dir,
                 "properties",
                 "allow-flight",
@@ -689,7 +690,7 @@ impl Game<'_> {
             return Err((INTERNAL_ERROR, Some(error.to_owned())));
         }
         if let Some(value) = value {
-            crate::config::update(
+            config::update(
                 &self.shared.dir,
                 "properties",
                 "hide-online-players",
@@ -712,7 +713,7 @@ impl Game<'_> {
             return Err((INTERNAL_ERROR, Some(error.to_owned())));
         }
         if let Some(value) = value {
-            crate::config::update(
+            config::update(
                 &self.shared.dir,
                 "properties",
                 "enable-status",
@@ -758,7 +759,7 @@ impl Game<'_> {
             return Err((INTERNAL_ERROR, Some(error.to_owned())));
         }
         if let Some(value) = value {
-            crate::config::update(
+            config::update(
                 &self.shared.dir,
                 "properties",
                 "player-idle-timeout",
@@ -781,7 +782,7 @@ impl Game<'_> {
             return Err((INTERNAL_ERROR, Some(error.to_owned())));
         }
         if let Some(value) = value {
-            crate::config::update(
+            config::update(
                 &self.shared.dir,
                 "server",
                 "max_players",
@@ -804,7 +805,7 @@ impl Game<'_> {
             return Err((INTERNAL_ERROR, Some(error.to_owned())));
         }
         if let Some(value) = value {
-            crate::config::update(
+            config::update(
                 &self.shared.dir,
                 "world",
                 "game_mode",
@@ -835,7 +836,7 @@ impl Game<'_> {
         }
         if let Some(value) = value {
             let value = reply["value"].as_i64().unwrap_or(i64::from(value));
-            crate::config::update(
+            config::update(
                 &self.shared.dir,
                 "properties",
                 "op-permission-level",
@@ -859,7 +860,7 @@ impl Game<'_> {
         }
         // server.toml's `motd` writes server.properties' at each start: keep the new one there too.
         if let Some(value) = value {
-            crate::config::update(
+            config::update(
                 &self.shared.dir,
                 "server",
                 "motd",
@@ -882,7 +883,7 @@ impl Game<'_> {
             return Err((INTERNAL_ERROR, Some(error.to_owned())));
         }
         if let Some(value) = value {
-            crate::config::update(
+            config::update(
                 &self.shared.dir,
                 "world",
                 "difficulty",
@@ -1320,6 +1321,39 @@ status-heartbeat-interval=0
             properties.contains("status-heartbeat-interval=-5"),
             "{properties}"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn heartbeat_update_does_not_replace_unreadable_properties() {
+        let shared = shared();
+        assert!(management::set_heartbeat_seconds(&shared, 15));
+        let toml = shared.dir.join(crate::config::FILE);
+        std::fs::write(&toml, crate::config::TEMPLATE).unwrap();
+        let properties = shared.dir.join(crate::config::PROPERTIES);
+        // These fail to read even as root, but an atomic rename could still replace either.
+        for target in [crate::config::PROPERTIES, "missing.properties"] {
+            std::os::unix::fs::symlink(target, &properties).unwrap();
+
+            let (code, message) = status_heartbeat_interval(&shared, 0).unwrap_err();
+            assert_eq!(code, INTERNAL_ERROR);
+            assert_eq!(management::heartbeat_seconds(&shared), 15);
+            let message = message.unwrap();
+            assert!(
+                message.contains(properties.to_string_lossy().as_ref()),
+                "{message}"
+            );
+            assert_eq!(
+                std::fs::read_link(&properties).unwrap().as_path(),
+                std::path::Path::new(target)
+            );
+            std::fs::remove_file(&properties).unwrap();
+        }
+        assert_eq!(
+            std::fs::read_to_string(&toml).unwrap(),
+            crate::config::TEMPLATE
+        );
+        std::fs::remove_dir_all(&shared.dir).unwrap();
     }
 
     /// A set to 0 or less with no heartbeat running cancels nothing, so later sets still apply.

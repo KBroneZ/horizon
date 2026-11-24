@@ -5,6 +5,8 @@ import subprocess
 import tempfile
 import unittest
 
+from native_hook_sources import native_hook_sources
+
 from test_world_input_capture import method
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,11 +16,11 @@ class ScreenKeyReleasedHookTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("rustc"), "requires Rust")
     def test_cancelled_release_still_releases_every_binding(self):
         source = "".join((ROOT / "crates/horizon-client/src" / path).read_text(encoding="utf-8")
-                         for path in ("game/play_input.rs", "game/key_codes.rs", "game.rs"))
-        hooks = (ROOT / "crates/horizon-client/src/game/native_hooks.rs").read_text(encoding="utf-8")
+                         for path in ("game/interface/play_input.rs", "game/interface/key_codes.rs", "game/runtime/window_handler.rs", "game.rs"))
+        hooks = native_hook_sources()
         gate = method(hooks.replace("pub(super) fn", "fn"), "screen_key_released")
         mapping = method(source, "mapped_key_event")
-        button = method(source.replace("fn keyboard_button(", "    fn keyboard_button("), "keyboard_button")
+        button = method(source.replace("pub(super) fn keyboard_button(", "    fn keyboard_button("), "keyboard_button")
         start = source.index("            if let WindowEvent::KeyboardInput", source.index("let result: Result<()> = (|| {"))
         opening = source.index("{", source.index("&& self.screen_key_released(key)", start))
         end, depth = opening + 1, 1
@@ -41,6 +43,10 @@ BUTTON
 fn container_key_clones(_: i32, _: KeyAction) -> bool { false }
 mod keybinds { pub fn key_name(key: i32) -> Option<&'static str> { (key == 1).then_some("key.keyboard.a") } }
 mod horizon_client { pub(crate) use crate::keybinds; }
+mod mod_api {
+    pub enum HookId { ScreenKeyReleasedPre }
+    pub mod __private { pub fn listened(_: super::HookId) -> bool { true } }
+}
 enum Source { Keyboard }
 struct Bindings;
 impl Bindings { fn translate_all(&self, _: i32) -> Vec<std::result::Result<i32, i32>> { vec![Ok(10), Ok(11), Err(2)] } }

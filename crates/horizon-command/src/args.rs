@@ -1,11 +1,87 @@
 //! Argument types (Brigadier's and Minecraft's `ArgumentType`s): parsing with
 //! the vanilla error messages and completion suggestions.
 use super::{CmdResult, CommandError, Context, Reader, SuggestionsBuilder};
-use horizon_world::nbt::Tag;
+use horizon_client_core::text::Text;
+use horizon_core::nbt::Tag;
+use std::{fmt, sync::Arc};
 
 pub use horizon_client_core::registries::{
     CustomCompletionAction, Registries, RegistryIds, modify_custom_completions,
 };
+pub use horizon_core::game_mode::GameMode;
+
+/// How much of the command line a registered custom argument takes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CustomArgumentKind {
+    /// One word, as Brigadier's `word` string: ASCII letters and digits, and `_ - . +`. It ends
+    /// at the first other character, a space included.
+    Word,
+    /// The rest of the line, spaces included.
+    Greedy,
+    /// One token: every character up to the next space or the end of the line, at least one.
+    Token,
+}
+
+/// One completion a registered custom argument offers.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CustomSuggestion {
+    /// The text that replaces the typed prefix, or the part of it `replace_start` sends the
+    /// replacement from.
+    pub text: String,
+    /// An optional explanation shown beside the completion.
+    pub tooltip: Option<String>,
+    /// The byte offset into the prefix where the replacement starts; `None` replaces the whole
+    /// prefix. A mod uses it to complete one token inside a greedy text argument.
+    pub replace_start: Option<usize>,
+}
+
+/// A mod's registered argument type, as the dispatcher parses and completes it.
+///
+/// The mod API object lives above this crate; the game adapts it into these closures so command
+/// parsing stays independent of the mod API.
+#[derive(Clone)]
+pub struct CustomArgument {
+    id: Arc<str>,
+    kind: CustomArgumentKind,
+    parse: Arc<dyn Fn(&str) -> Result<String, Text> + Send + Sync>,
+    suggest: Arc<dyn Fn(&Registries, &str) -> Vec<CustomSuggestion> + Send + Sync>,
+}
+
+impl fmt::Debug for CustomArgument {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CustomArgument")
+            .field("id", &self.id)
+            .field("kind", &self.kind)
+            .finish()
+    }
+}
+
+impl CustomArgument {
+    /// A custom argument type `id` (such as `mymod:machine`) that reads a [`CustomArgumentKind`],
+    /// validates it with `parse` and completes it with `suggest`, which also sees the registries
+    /// the request is for (the sender and their permission).
+    pub fn new(
+        id: impl Into<Arc<str>>,
+        kind: CustomArgumentKind,
+        parse: impl Fn(&str) -> Result<String, Text> + Send + Sync + 'static,
+        suggest: impl Fn(&Registries, &str) -> Vec<CustomSuggestion> + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            kind,
+            parse: Arc::new(parse),
+            suggest: Arc::new(suggest),
+        }
+    }
+    /// The registered type's namespaced id.
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+    /// How much of the line the argument takes.
+    pub fn kind(&self) -> CustomArgumentKind {
+        self.kind
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Resource {
@@ -66,6 +142,11 @@ pub enum ArgType {
     Resource(Resource),
     /// A plain identifier; suggestions come from the named list.
     Id(&'static str),
+    /// Vanilla's free identifier (`minecraft:resource_location`): a `namespace:path` of
+    /// identifier characters, canonical with the `minecraft` namespace when it is left out, with
+    /// no registry to check and no list of its own to suggest: the node asks the server, which
+    /// answers from the mods' own suggestions.
+    Identifier,
     /// ResourceArgument over a registry (the element must exist).
     Res(&'static str),
     /// ResourceKeyArgument (checked when the command runs).
@@ -140,8 +221,12 @@ pub enum ArgType {
     SlotSource,
     /// ResourceOrIdArgument over a registry: an id or an inline SNBT value.
     ResourceOrId(&'static str),
+    /// A received loot table argument: the server owns the registry and codec lookup.
+    ServerLootTable,
     /// ResourceSelectorArgument: a `*`/`?` pattern over a registry's ids.
     ResourceSelector(&'static str),
+    /// A registered argument type: the mod's parser and suggestions.
+    Custom(CustomArgument),
 }
 
 /// Apache Commons IO's case-sensitive wildcard match of `*` and `?` patterns.
@@ -346,8 +431,10 @@ pub struct Selector {
     pub player_name: Option<String>,
     /// The entity UUID when the argument was one.
     pub uuid: Option<u128>,
-    /// 'p', 'a', 'r', 's', 'e', 'n'.
+    /// 'p', 'a', 'r', 's', 'e', 'n'; 'e' for a mod's token.
     pub kind: char,
+    /// The mod's selector token (`allies` for `@allies`), whose type filters the candidates.
+    pub token: Option<String>,
     pub limit: usize,
     pub sort: Sort,
     pub include_entities: bool,
@@ -416,32 +503,6 @@ pub struct ItemInput {
     pub any: bool,
     pub components: Option<String>,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum GameMode {
-    Survival,
-    Creative,
-    Adventure,
-    Spectator,
-}
-impl GameMode {
-    pub const ALL: [GameMode; 4] = [
-        GameMode::Survival,
-        GameMode::Creative,
-        GameMode::Adventure,
-        GameMode::Spectator,
-    ];
-    pub fn name(self) -> &'static str {
-        match self {
-            GameMode::Survival => "survival",
-            GameMode::Creative => "creative",
-            GameMode::Adventure => "adventure",
-            GameMode::Spectator => "spectator",
-        }
-    }
-    pub fn from_name(s: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|m| m.name() == s)
-    }
-}
 #[derive(Clone, Debug, PartialEq)]
 pub enum Arg {
     Bool(bool),
@@ -461,6 +522,16 @@ pub enum Arg {
     ScoreHolder(ScoreHolderArg),
     IntRange(IntRange),
     DoubleRange(DoubleRange),
+    /// A custom argument: the id of its registered type and its canonical value.
+    Custom {
+        kind: Arc<str>,
+        value: String,
+    },
+}
+
+#[inline]
+fn is_id_byte(b: u8) -> bool {
+    b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'_' | b'-' | b'.' | b':' | b'/')
 }
 
 pub fn is_id_char(c: char) -> bool {
@@ -473,11 +544,17 @@ pub fn read_id(reader: &mut Reader) -> CmdResult<String> {
 }
 /// Identifier.read.
 pub fn read_identifier(reader: &mut Reader) -> CmdResult<String> {
+    let bytes = reader.string.as_bytes();
     let start = reader.cursor;
-    while reader.can_read() && is_id_char(reader.peek()) {
-        reader.skip();
+    let mut end = start;
+    while let Some(&b) = bytes.get(end) {
+        if !is_id_byte(b) {
+            break;
+        }
+        end += 1;
     }
-    let raw = &reader.string[start..reader.cursor];
+    reader.cursor = end;
+    let raw = &reader.string[start..end];
     match parse_identifier(raw) {
         Some(id) => Ok(id),
         None => {
@@ -488,10 +565,14 @@ pub fn read_identifier(reader: &mut Reader) -> CmdResult<String> {
 }
 pub use horizon_client_core::identifier::parse_identifier;
 pub fn normalize(id: &str) -> String {
+    normalized(id).into_owned()
+}
+/// `normalize` that borrows an id which already has its namespace.
+pub fn normalized(id: &str) -> std::borrow::Cow<'_, str> {
     match id.split_once(':') {
-        Some(("", path)) => format!("minecraft:{path}"),
-        Some(_) => id.to_owned(),
-        None => format!("minecraft:{id}"),
+        Some(("", path)) => format!("minecraft:{path}").into(),
+        Some(_) => id.into(),
+        None => format!("minecraft:{id}").into(),
     }
 }
 /// SharedSuggestionProvider.matchesSubStr: `input` is a prefix of
@@ -566,18 +647,19 @@ fn read_bounds<T: Copy>(
     }
     let start = reader.cursor;
     let number = |reader: &mut Reader| -> CmdResult<Option<T>> {
+        let bytes = reader.string.as_bytes();
         let s = reader.cursor;
-        while reader.can_read() {
-            let c = reader.peek();
-            let allowed = c.is_ascii_digit()
-                || c == '-'
-                || (c == '.' && !(reader.can_read_n(2) && reader.peek_at(1) == '.'));
+        let mut end = s;
+        while let Some(&b) = bytes.get(end) {
+            let allowed =
+                b.is_ascii_digit() || b == b'-' || (b == b'.' && bytes.get(end + 1) != Some(&b'.'));
             if !allowed {
                 break;
             }
-            reader.skip();
+            end += 1;
         }
-        let text = &reader.string[s..reader.cursor];
+        reader.cursor = end;
+        let text = &reader.string[s..end];
         if text.is_empty() {
             return Ok(None);
         }
@@ -588,9 +670,13 @@ fn read_bounds<T: Copy>(
     };
     let result = (|| {
         let min = number(reader)?;
-        let max = if reader.can_read_n(2) && reader.peek() == '.' && reader.peek_at(1) == '.' {
-            reader.skip();
-            reader.skip();
+        let max = if reader
+            .string
+            .as_bytes()
+            .get(reader.cursor..reader.cursor + 2)
+            == Some(b"..")
+        {
+            reader.cursor += 2;
             number(reader)?
         } else {
             min
@@ -632,16 +718,34 @@ pub fn read_double_bounds(reader: &mut Reader) -> CmdResult<DoubleRange> {
 }
 /// MinMaxBounds.FloatDegrees.fromReader (no swap check).
 pub fn read_float_bounds(reader: &mut Reader) -> CmdResult<(Option<f32>, Option<f32>)> {
-    read_bounds(
-        reader,
-        |s| java_parse_double(s).map(|v| v as f32),
-        "parsing.float.invalid",
-    )
+    read_bounds(reader, parse_float_bound, "parsing.float.invalid")
+}
+/// Java float parsing (`Float.parseFloat`) in a single IEEE-754 rounding over the
+/// characters `read_bounds` admits (`[0-9.-]`).
+fn parse_float_bound(s: &str) -> Option<f32> {
+    let body = s.strip_prefix('-').unwrap_or(s);
+    let mut chars = body.chars().peekable();
+    let mut digits = 0;
+    while chars.peek().is_some_and(char::is_ascii_digit) {
+        chars.next();
+        digits += 1;
+    }
+    if chars.peek() == Some(&'.') {
+        chars.next();
+        while chars.peek().is_some_and(char::is_ascii_digit) {
+            chars.next();
+            digits += 1;
+        }
+    }
+    if digits == 0 || chars.next().is_some() {
+        return None;
+    }
+    s.parse::<f32>().ok()
 }
 /// Java integer parsing over number characters.
 pub fn java_parse_int(s: &str) -> Option<i32> {
     let digits = s.strip_prefix(['-', '+']).unwrap_or(s);
-    if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit()) {
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
         return None;
     }
     s.parse().ok()
@@ -663,43 +767,43 @@ pub fn java_parse_double(s: &str) -> Option<f64> {
             f64::INFINITY
         }));
     }
-    let mut chars = body.chars().peekable();
-    let mut digits = 0;
-    while chars.peek().is_some_and(char::is_ascii_digit) {
-        chars.next();
+    let bytes = body.as_bytes();
+    let mut i = 0;
+    let mut digits = 0usize;
+    while i < bytes.len() && bytes[i].is_ascii_digit() {
+        i += 1;
         digits += 1;
     }
-    if chars.peek() == Some(&'.') {
-        chars.next();
-        while chars.peek().is_some_and(char::is_ascii_digit) {
-            chars.next();
+    if i < bytes.len() && bytes[i] == b'.' {
+        i += 1;
+        while i < bytes.len() && bytes[i].is_ascii_digit() {
+            i += 1;
             digits += 1;
         }
     }
     if digits == 0 {
         return None;
     }
-    if matches!(chars.peek(), Some('e' | 'E')) {
-        chars.next();
-        if matches!(chars.peek(), Some('+' | '-')) {
-            chars.next();
+    if i < bytes.len() && matches!(bytes[i], b'e' | b'E') {
+        i += 1;
+        if i < bytes.len() && matches!(bytes[i], b'+' | b'-') {
+            i += 1;
         }
-        let mut exp = 0;
-        while chars.peek().is_some_and(char::is_ascii_digit) {
-            chars.next();
+        let mut exp = 0usize;
+        while i < bytes.len() && bytes[i].is_ascii_digit() {
+            i += 1;
             exp += 1;
         }
         if exp == 0 {
             return None;
         }
     }
-    if chars.next().is_some() {
+    if i < bytes.len() {
         return None;
     }
-    let clean: String = t
+    let clean = t
         .trim_end_matches(['d', 'D', 'f', 'F'])
-        .trim_start_matches('+')
-        .to_owned();
+        .trim_start_matches('+');
     clean.parse::<f64>().ok()
 }
 fn parse_coord_int(reader: &mut Reader) -> CmdResult<Coord> {
@@ -996,9 +1100,9 @@ fn particle_fields(id: &str) -> &'static [&'static str] {
 }
 /// The particle type's codec over the options (`RecordCodecBuilder` decodes
 /// the fields last to first, and every field's error joins with `; `).
-fn particle_options(id: &str, t: &horizon_world::nbt::Tag, reg: &Registries) -> Result<(), String> {
+fn particle_options(id: &str, t: &horizon_core::nbt::Tag, reg: &Registries) -> Result<(), String> {
     use super::codec::{get, no_key, not_map};
-    let horizon_world::nbt::Tag::Compound(map) = t else {
+    let horizon_core::nbt::Tag::Compound(map) = t else {
         return Err(not_map(t));
     };
     let checks = particle_value_checks(id);
@@ -1089,7 +1193,7 @@ fn scale_option(t: &Tag, _reg: &Registries) -> Result<(), String> {
     } else {
         Err(format!(
             "Value must be within range [0.01;4.0]: {}",
-            horizon_client_core::snbt::java_float(v)
+            horizon_core::java_number::float_to_string(v)
         ))
     }
 }
@@ -1222,8 +1326,8 @@ impl ArgType {
                     return Err(CommandError::tr_at(
                         "argument.float.low",
                         &[
-                            &horizon_client_core::snbt::java_float(*min),
-                            &horizon_client_core::snbt::java_float(v),
+                            &horizon_core::java_number::float_to_string(*min),
+                            &horizon_core::java_number::float_to_string(v),
                         ],
                         reader,
                     ));
@@ -1233,8 +1337,8 @@ impl ArgType {
                     return Err(CommandError::tr_at(
                         "argument.float.big",
                         &[
-                            &horizon_client_core::snbt::java_float(*max),
-                            &horizon_client_core::snbt::java_float(v),
+                            &horizon_core::java_number::float_to_string(*max),
+                            &horizon_core::java_number::float_to_string(v),
                         ],
                         reader,
                     ));
@@ -1248,8 +1352,8 @@ impl ArgType {
                     return Err(CommandError::tr_at(
                         "argument.double.low",
                         &[
-                            &horizon_client_core::snbt::java_double(*min),
-                            &horizon_client_core::snbt::java_double(v),
+                            &horizon_core::java_number::double_to_string(*min),
+                            &horizon_core::java_number::double_to_string(v),
                         ],
                         reader,
                     ));
@@ -1259,8 +1363,8 @@ impl ArgType {
                     return Err(CommandError::tr_at(
                         "argument.double.big",
                         &[
-                            &horizon_client_core::snbt::java_double(*max),
-                            &horizon_client_core::snbt::java_double(v),
+                            &horizon_core::java_number::double_to_string(*max),
+                            &horizon_core::java_number::double_to_string(v),
                         ],
                         reader,
                     ));
@@ -1269,6 +1373,9 @@ impl ArgType {
             }
             ArgType::Word => Arg::Str(reader.read_unquoted_string().to_owned()),
             ArgType::Str => Arg::Str(reader.read_string()?),
+            // ResourceLocationArgument: the longest run of identifier characters, canonicalised
+            // to `namespace:path`; an upper-case or two-colon token is `argument.id.invalid`.
+            ArgType::Identifier => Arg::Str(read_id(reader)?),
             ArgType::Greedy => {
                 let s = reader.remaining().to_owned();
                 reader.cursor = reader.string.len();
@@ -1522,7 +1629,7 @@ impl ArgType {
                     .map(char::len_utf8)
                     .sum();
                 match (run > 0)
-                    .then(|| super::selector::java_uuid(&rest[..run]))
+                    .then(|| horizon_core::text::parse_java_uuid(&rest[..run]))
                     .flatten()
                 {
                     Some(_) => {
@@ -1759,7 +1866,7 @@ impl ArgType {
                 let options = if reader.can_read() && reader.peek() == '{' {
                     super::snbt::parse_tag_argument(reader)?
                 } else {
-                    horizon_world::nbt::Tag::Compound(Default::default())
+                    horizon_core::nbt::Tag::Compound(Default::default())
                 };
                 if let Err(m) = particle_options(&id, &options, reg) {
                     return Err(CommandError::tr("particle.invalidOptions", &[&m]));
@@ -1818,6 +1925,10 @@ impl ArgType {
                 super::codec::resource_or_id(reader, reg, registry)?;
                 Arg::Resource(reader.string[start..reader.cursor].to_owned())
             }
+            ArgType::ServerLootTable => {
+                super::codec::resource_or_id_syntax(reader)?;
+                Arg::Resource(reader.string[start..reader.cursor].to_owned())
+            }
             ArgType::NbtPath => {
                 parse_nbt_path(reader)?;
                 Arg::Str(reader.string[start..reader.cursor].to_owned())
@@ -1838,6 +1949,37 @@ impl ArgType {
                             &[&name],
                             reader,
                         ));
+                    }
+                }
+            }
+            ArgType::Custom(custom) => {
+                let text = match custom.kind {
+                    CustomArgumentKind::Word => reader.read_unquoted_string().to_owned(),
+                    CustomArgumentKind::Greedy => {
+                        let text = reader.remaining().to_owned();
+                        reader.cursor = reader.string.len();
+                        text
+                    }
+                    CustomArgumentKind::Token => {
+                        let token = reader.read_token().to_owned();
+                        if token.is_empty() {
+                            return Err(CommandError::tr_at(
+                                "parsing.expected",
+                                &[&"a token"],
+                                reader,
+                            ));
+                        }
+                        token
+                    }
+                };
+                match (custom.parse)(&text) {
+                    Ok(value) => Arg::Custom {
+                        kind: custom.id.clone(),
+                        value,
+                    },
+                    Err(message) => {
+                        reader.cursor = start;
+                        return Err(CommandError::at(message, reader));
                     }
                 }
             }
@@ -2016,8 +2158,58 @@ impl ArgType {
             }
             ArgType::Anchor => builder.suggest_matching(["eyes", "feet"]),
             ArgType::Component | ArgType::Style | ArgType::NbtTag => super::snbt::suggest(builder),
-            ArgType::Swizzle | ArgType::Message | ArgType::Nbt => {}
+            ArgType::Swizzle | ArgType::Message | ArgType::Nbt | ArgType::ServerLootTable => {}
+            ArgType::Custom(custom) => {
+                let prefix = builder.remaining().to_owned();
+                for suggestion in (custom.suggest)(reg, &prefix) {
+                    // A suggestion may replace only the tail of the text argument, from its
+                    // offset: a completion for the token a greedy text is typing. One that
+                    // starts past the typed text or inside a character is left out rather than
+                    // panicking where the chat applies it (the game refuses it by name first).
+                    let start = match suggestion.replace_start {
+                        Some(offset)
+                            if offset <= prefix.len() && prefix.is_char_boundary(offset) =>
+                        {
+                            builder.start + offset
+                        }
+                        Some(_) => continue,
+                        None => builder.start,
+                    };
+                    match suggestion.tooltip {
+                        Some(tooltip) => {
+                            builder.suggest_at_tooltip(start, suggestion.text, tooltip)
+                        }
+                        None => builder.suggest_at(start, suggestion.text),
+                    }
+                }
+            }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn read_float_bounds_avoids_double_rounding() {
+        // Strictly below the f32 midpoint 16777219.0 (between 16777218 and 16777220):
+        // f64 rounds up to 16777219.0 and casting to f32 then ties-to-even up to 16777220.0,
+        // whereas single-rounding Float.parseFloat lands on 16777218.0.
+        let boundary = "16777218.9999999999";
+        assert_eq!(
+            java_parse_double(boundary).map(|v| v as f32),
+            Some(16_777_220.0)
+        );
+        let mut reader = Reader::new(boundary);
+        assert_eq!(
+            read_float_bounds(&mut reader).unwrap(),
+            (Some(16_777_218.0), Some(16_777_218.0))
+        );
+        // Reject malformed bound tokens that read_bounds can slice.
+        assert_eq!(parse_float_bound("."), None);
+        assert_eq!(parse_float_bound("-."), None);
+        assert_eq!(parse_float_bound("1.2.3"), None);
     }
 }
