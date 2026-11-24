@@ -352,7 +352,10 @@ mod tests {
                     mod_api::__private::PhaseOwner::new(mod_api::__private::ModPhase::Setup);
                 game.native_configs_client_start();
                 game.native_configs_client_start();
-                game.options.role = crate::game::role::Role::Guest { window: false, auth: None };
+                game.options.role = crate::game::role::Role::Guest {
+                    window: false,
+                    auth: None,
+                };
                 game.native_configs = NativeConfigs::default();
                 game.native_configs_client_start();
                 game.options.role = crate::game::role::Role::Alone;

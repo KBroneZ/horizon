@@ -555,7 +555,10 @@ fn only_the_first_local_client_is_the_client_start() {
         game.options.execution_role = ExecutionRole::Client;
         game.options.role = crate::game::role::Role::Alone;
         assert!(game.options.is_client_start());
-        game.options.role = crate::game::role::Role::Guest { window: false, auth: None };
+        game.options.role = crate::game::role::Role::Guest {
+            window: false,
+            auth: None,
+        };
         assert!(!game.options.is_client_start());
         game.options.role = crate::game::role::Role::Alone;
         game.options.execution_role = ExecutionRole::DedicatedServer;

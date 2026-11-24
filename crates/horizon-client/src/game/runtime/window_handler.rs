@@ -1014,7 +1014,10 @@ mod tests {
                 game.options.headless = true;
                 assert!(!(game as &dyn ClientHost).request_client_quit());
                 game.options.headless = false;
-                game.options.role = crate::game::role::Role::Guest { window: false, auth: None };
+                game.options.role = crate::game::role::Role::Guest {
+                    window: false,
+                    auth: None,
+                };
                 assert!(!(game as &dyn ClientHost).request_client_quit());
                 game.options.role = crate::game::role::Role::Alone;
                 for role in [
