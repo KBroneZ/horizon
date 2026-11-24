@@ -69,3 +69,15 @@ horizon_client::game::creatures::mob_islands::defers  kind=fn  #18420
 horizon_client::game::spear::Game<'_>::remote_sync_look  #16850
 horizon_client::entry::horizon_look  #15407
 horizon_client::game::native_hooks::Game<'_>::screen_menu  kind=method  #20038
+horizon_client::game::Game<'_>::realm_session  #15378
+horizon_client::game::extras::ExtrasState::reconnect  #15378
+horizon_client::game::extras::reconnect::Game<'_>::extras_connecting  #15378
+horizon_client::game::extras::reconnect::Game<'_>::extras_joined  #15378
+horizon_client::game::extras::reconnect::Game<'_>::extras_left  #15378
+horizon_client::game::extras::reconnect::Game<'_>::extras_retry  #15378
+horizon_client::game::extras::reconnect::Game<'_>::offer_reconnect  #15378
+horizon_client::game::extras::reconnect::Game<'_>::reconnect_after  #15378
+horizon_client::game::extras::reconnect::Game<'_>::server_address  #15378
+horizon_client::game::extras::reconnect::Game<'_>::server_is_lan  #15378
+horizon_client_lib::reconnect::Retry  #15378
+horizon_client_lib::reconnect::Tracker  #15378
