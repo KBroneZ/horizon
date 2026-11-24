@@ -4,6 +4,7 @@ Vanilla reference: MultiPlayerGameMode.startDestroyBlock/continueDestroyBlock.
 The first_person parity harness separately checks consecutive instant breaks
 against the pinned client; this fixture catches drift in the multiplayer path.
 """
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -17,9 +18,9 @@ ROOT = Path(__file__).resolve().parents[1]
 @unittest.skipUnless(shutil.which("rustc"), "requires Rust")
 class RemoteMiningTests(unittest.TestCase):
     def test_break_timing_and_packets(self):
-        source = (ROOT / "crates/horizon-client/src/game/remote.rs").read_text()
-        start = source.index("    pub(super) fn stop_remote_mining(")
-        end = source.index("    /// MultiPlayerGameMode.destroyBlock", start)
+        source = (next(ROOT.glob('crates/horizon-client/src/game/*/remote/mining.rs'))).read_text()
+        start = source.index("    pub(super) fn stop_remote_mining_body(")
+        end = source.index("    pub(super) fn veto_mining_prediction_body(", start)
         fixture = r'''
 #![allow(dead_code)]
 #[derive(Clone, Copy)]
@@ -68,13 +69,20 @@ mod play {
 }
 enum S { PlayerAction(play::PlayerAction) }
 fn face_direction(face: u8) -> u8 { face }
+/// WorldBorder.isWithinBounds for a square border of half-width `half` at the origin.
+struct Border { half: f64 }
+impl Border {
+    fn contains(&self, x: f64, z: f64) -> bool { x.abs() < self.half && z.abs() < self.half }
+}
 struct Game {
     remote: Option<Remote>, mining: Option<Mining>, creative: bool,
     world: World, res: Resources, player: Option<Player>, audio: Audio,
     hit: Hit, sequence: i32, packets: Vec<play::PlayerAction>, restricted: bool,
+    veto: bool, border: Border,
 }
 impl Game {
     fn main_hand_key(&self) -> String { String::new() }
+    fn same_destroying_item(&self, began: &String) -> bool { *began == self.main_hand_key() }
     fn reset_attack_strength(&mut self) {}
     fn new(hardness: f32, speed: f32, creative: bool) -> Self {
         Self {
@@ -85,13 +93,16 @@ impl Game {
             player: Some(Player { ground: Ground { on_ground: true } }),
             audio: Audio { played: Vec::new() },
             hit: Hit { pos: [0, 64, 0], face: 1 }, sequence: 0, packets: vec![],
-            restricted: false,
+            restricted: false, veto: false, border: Border { half: 1.0e6 },
         }
     }
     fn pick(&self) -> Option<Hit> { Some(self.hit) }
     fn held(&self) -> Option<&Stack> { None }
     // Player.blockActionRestricted: adventure without a can_break item.
     fn remote_break_restricted(&self, _: [i32; 3]) -> bool { self.restricted }
+    fn veto_mining_prediction(&self, _: [i32; 3], _: u8, _: bool, _: f32) -> bool {
+        self.veto
+    }
     // Game::destroy_progress (hand.rs) for a harvestable block on the ground.
     fn destroy_progress(&self, _: [i32; 3]) -> f32 {
         self.res.speed / self.res.facts.hardness / 30.0
@@ -114,6 +125,22 @@ impl Game {
 METHOD
 }
 fn main() {
+    let mut game = Game::new(1.0, 1.0, false);
+    game.veto = true;
+    assert!(!game.remote_mining(true));
+    assert!(game.packets.is_empty());
+    assert!(game.mining.is_none());
+    game.veto = false;
+    assert!(game.remote_mining(true));
+    let before = game.remote.as_ref().unwrap().destroying;
+    game.veto = true;
+    assert!(!game.remote_mining(false));
+    assert_eq!(game.remote.as_ref().unwrap().destroying, before);
+    assert!(game.remote.as_ref().unwrap().is_destroying);
+    assert!(game.stop_remote_mining());
+    assert!(!game.stop_remote_mining());
+    assert_eq!(game.packets.iter().map(|p| p.action).collect::<Vec<_>>(), [0, 2]);
+
     // Zero-hardness blocks and a tool fast enough to break in one tick.
     for (hardness, speed) in [(0.0, 1.0), (0.5, 15.0), (0.5, 30.0)] {
         let mut game = Game::new(hardness, speed, false);
@@ -205,15 +232,31 @@ fn main() {
         assert!(game.mining.is_none());
         assert!(game.remote.as_ref().unwrap().destroying.is_none());
     }
+    // A block outside the world border: startDestroyBlock returns false before
+    // its creative branch, so neither mode predicts, sends or swings (#19898).
+    for creative in [false, true] {
+        let mut game = Game::new(1.0, 1.0, creative);
+        game.border = Border { half: 8.0 };
+        game.hit.pos = [20, 64, 0];
+        assert!(!game.remote_mining(true));
+        assert!(!game.remote_mining(false));
+        assert!(game.world.broken.is_empty());
+        assert!(game.packets.is_empty());
+        assert!(game.audio.played.is_empty());
+        assert!(game.mining.is_none());
+    }
 }
-'''.replace("METHOD", source[start:end].replace("pub(super) fn", "fn"))
+'''.replace("METHOD", source[start:end].replace("pub(super) fn", "fn").replace("_body(", "("))
         with tempfile.TemporaryDirectory(prefix="remote-mining-") as directory:
             path = Path(directory)
             (path / "main.rs").write_text(fixture)
-            compiled = subprocess.run(["rustc", "--edition=2024", str(path / "main.rs"), "-o", str(path / "probe")],
-                                      capture_output=True, text=True)
-            self.assertEqual(compiled.returncode, 0, compiled.stdout + compiled.stderr)
-            result = subprocess.run([str(path / "probe")], capture_output=True, text=True)
+            probe = path / ("probe.exe" if os.name == "nt" else "probe")
+            compile_result = subprocess.run(
+                ["rustc", "--edition=2024", str(path / "main.rs"), "-o", str(probe)],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(compile_result.returncode, 0, compile_result.stderr)
+            result = subprocess.run([str(probe)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 

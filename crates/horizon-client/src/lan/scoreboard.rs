@@ -10,11 +10,11 @@
 //! have now, which are the ones `ServerScoreboard`'s callbacks send.
 use crate::scoreboard::{NumberFormat, RenderType, Scoreboard, component_tag, display_slots};
 use crate::text::COLORS;
+use horizon_core::nbt::Tag;
 use horizon_protocol::packets::play::{
     self, Clientbound as C, ResetScore, SetDisplayObjective, SetObjective, SetPlayerTeam, SetScore,
     TeamParameters,
 };
-use horizon_world::nbt::Tag;
 use std::collections::{BTreeMap, BTreeSet};
 
 type Format = Option<play::NumberFormat>;
@@ -115,6 +115,55 @@ impl View {
             scores,
             teams,
         }
+    }
+
+    /// The packets a joining player receives (`PlayerList.updateEntireScoreboard`):
+    /// every team first, then each displayed objective grouped whole with its
+    /// display slots and scores (`ServerScoreboard.getStartTrackingPackets`).
+    pub fn initial_packets(&self) -> Vec<C> {
+        let mut out = Vec::new();
+        for (name, (params, players)) in &self.teams {
+            out.push(C::SetPlayerTeam(SetPlayerTeam {
+                name: name.clone(),
+                method: 0,
+                parameters: Some(params.clone()),
+                players: players.clone(),
+            }));
+        }
+        let mut sent = BTreeSet::new();
+        for objective_name in self.display.values() {
+            if !sent.insert(objective_name) {
+                continue;
+            }
+            let Some(display) = self.objectives.get(objective_name) else {
+                continue;
+            };
+            out.push(C::SetObjective(SetObjective {
+                name: objective_name.clone(),
+                method: 0,
+                display: Some(display.clone()),
+            }));
+            for (&slot, shown) in &self.display {
+                if shown == objective_name {
+                    out.push(C::SetDisplayObjective(SetDisplayObjective {
+                        slot,
+                        objective: objective_name.clone(),
+                    }));
+                }
+            }
+            for ((holder, objective), (value, score_display, number_format)) in &self.scores {
+                if objective == objective_name {
+                    out.push(C::SetScore(SetScore {
+                        owner: holder.clone(),
+                        objective: objective.clone(),
+                        score: *value,
+                        display: score_display.clone(),
+                        number_format: number_format.clone(),
+                    }));
+                }
+            }
+        }
+        out
     }
 
     /// The packets that take a client from `self` to `next`.
@@ -331,6 +380,59 @@ mod tests {
                 "team red 4 [\"Alpha\"]",
                 "team amber 0 [\"Beta\"]",
                 "team blue 3 [\"Alpha\"]"
+            ]
+        );
+    }
+
+    #[test]
+    fn initial_sync_groups_each_displayed_objective_after_teams() {
+        let mut board = Scoreboard::default();
+        board.add_team("red");
+        board.add_to_team("Alpha", "red");
+        board.add_objective(
+            "kills",
+            "dummy",
+            json!("Kills"),
+            RenderType::Integer,
+            false,
+            None,
+        );
+        board.add_objective(
+            "deaths",
+            "dummy",
+            json!("Deaths"),
+            RenderType::Integer,
+            false,
+            None,
+        );
+        board.add_objective(
+            "hidden",
+            "dummy",
+            json!("Hidden"),
+            RenderType::Integer,
+            false,
+            None,
+        );
+        board.score_mut("Alpha", "kills").value = 5;
+        board.score_mut("Beta", "deaths").value = 2;
+        board.score_mut("Gamma", "hidden").value = 9;
+        // `kills` in both list (0) and below_name (2); `deaths` in sidebar (1).
+        board.set_display_objective("list", Some("kills"));
+        board.set_display_objective("sidebar", Some("deaths"));
+        board.set_display_objective("below_name", Some("kills"));
+
+        let view = View::of(&board);
+        assert_eq!(
+            methods(&view.initial_packets()),
+            [
+                "team red 0 [\"Alpha\"]",
+                "objective kills 0",
+                "display 0 kills",
+                "display 2 kills",
+                "score Alpha kills 5",
+                "objective deaths 0",
+                "display 1 deaths",
+                "score Beta deaths 2",
             ]
         );
     }
