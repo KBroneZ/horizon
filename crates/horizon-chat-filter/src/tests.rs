@@ -108,6 +108,17 @@ fn a_custom_list_has_the_same_syntax() {
     assert!(!f.matches("me h"));
 }
 
+#[test]
+fn a_large_custom_list_keeps_rules_past_the_u16_boundary() {
+    let list = "alpha\n".repeat(65_536) + "~omega\n";
+    let filter = Filter::new(&list);
+    assert_eq!(filter.len(), 65_537);
+    assert!(filter.matches("alpha"));
+    assert!(filter.matches("omega"));
+    assert!(filter.matches("o me ga"));
+    assert!(!filter.matches("hello"));
+}
+
 fn guard(config: Config) -> Guard {
     Guard::new(config, filter(), None)
 }
@@ -309,6 +320,28 @@ fn log_lines_have_the_time_the_player_and_the_text() {
 }
 
 #[test]
+fn a_logged_text_or_name_cannot_forge_a_line() {
+    let line = log_line(
+        NOW,
+        "Ann\r\nBob",
+        1,
+        "chat",
+        1,
+        Action::Refused,
+        "a\rb\u{85}c\u{2028}d\u{2029}e\u{b}f\u{c}g",
+    );
+    assert!(!line.contains(|c: char| c.is_control() || c == '\u{2028}' || c == '\u{2029}'));
+    assert!(line.contains(" Ann  Bob "));
+    assert!(line.ends_with(": a b c d e f g"));
+    // A long text is cut, with a marker.
+    let long = log_line(NOW, "Ann", 1, "book", 1, Action::Refused, &"x".repeat(5000));
+    assert!(long.len() < 1200 && long.ends_with("...[cut]"));
+    // A chat line (256) is kept whole.
+    let chat = "y".repeat(256);
+    assert!(log_line(NOW, "Ann", 1, "chat", 1, Action::Refused, &chat).ends_with(&chat));
+}
+
+#[test]
 fn a_message_costs_little() {
     // A long message through the whole list stays far below a tick (debug builds included).
     let f = filter();
@@ -342,4 +375,26 @@ fn duration_parts_preserve_rounding_without_overflow() {
     ] {
         assert_eq!(duration_parts(millis), expected);
     }
+}
+
+#[test]
+fn a_punishment_that_lasts_no_time_is_refused() {
+    let mut config = Config {
+        mute_minutes: 0,
+        ..Config::default()
+    };
+    assert!(
+        config.check().is_err(),
+        "mute_minutes = 0 with mute_after = 2"
+    );
+    config.mute_minutes = 10;
+    config.tempban_hours = 0;
+    assert!(
+        config.check().is_err(),
+        "tempban_hours = 0 with tempban_after = 3"
+    );
+    // Turned off, the length no longer matters.
+    config.mute_after = 0;
+    config.tempban_after = 0;
+    assert!(config.check().is_ok());
 }

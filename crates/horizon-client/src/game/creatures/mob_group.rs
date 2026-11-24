@@ -8,7 +8,7 @@ use horizon_client::{
     fast_hash::{FxHashMap, FxHashSet},
     mobs::{MobSlot, PendingPushes, seen_grid::SeenGrid, spawning::LocalDifficulty},
 };
-use horizon_core::random::LegacyRandom;
+use horizon_core::random::LevelRandom;
 
 /// What every mob of the loop reads and none writes.
 pub(super) struct Shared<'a> {
@@ -42,11 +42,13 @@ pub(super) struct Group<M: MobSlot> {
     /// The first slot of each id, as a scan would find it.
     index: FxHashMap<u32, u32>,
     villager_slots: Vec<u32>,
+    village: horizon_client::mobs::village_index::VillageIndex,
+    species_slots: horizon_client::mobs::species_slots::SpeciesSlots,
     solid_slots: Vec<u32>,
     pub pushes: PendingPushes,
     pub events: Vec<MobEvent>,
     /// The level random, lent to the mobs (brain behaviours draw from it).
-    pub random: LegacyRandom,
+    pub random: LevelRandom,
     pub guests: super::super::lan_mobs::GuestViews,
     /// What stands in a guest's slot while a mob holds that guest's view for its tick.
     spare: Option<PlayerView>,
@@ -89,8 +91,6 @@ fn own_random() -> bool {
 /// What decides each turn besides the group, read at the turn as the serial loop reads it.
 pub(super) struct Turns<'t, 'w> {
     pub base: &'t MobWorld<'w>,
-    /// `base` for the despawn checks: no snapshot, no player.
-    pub despawn: MobWorld<'w>,
     /// Whether a block column is in an entity-ticking chunk.
     pub ticking: &'t dyn Fn(i32, i32) -> bool,
     pub nearest: &'t super::prep::MobsNearest<'t>,
@@ -108,7 +108,7 @@ pub(super) struct Turns<'t, 'w> {
 #[derive(Clone)]
 pub(super) struct Start {
     pub events: Vec<MobEvent>,
-    pub random: LegacyRandom,
+    pub random: LevelRandom,
     pub guests: super::super::lan_mobs::GuestViews,
     pub player: Option<PlayerView>,
     pub bindings: FxHashMap<u32, u32>,
@@ -133,6 +133,7 @@ impl<M: MobSlot> Group<M> {
             }
         }
         let n = mobs.len();
+        let species_slots = horizon_client::mobs::species_slots::SpeciesSlots::new(&snapshot);
         Self {
             spare: start.guests.first().map(|g| g.1.clone()),
             mobs,
@@ -142,6 +143,8 @@ impl<M: MobSlot> Group<M> {
             grid,
             index,
             villager_slots,
+            village: Default::default(),
+            species_slots,
             solid_slots,
             pushes: PendingPushes::default(),
             events: start.events,
@@ -235,17 +238,15 @@ impl<M: MobSlot> Group<M> {
             self.unloaded(i);
             return;
         }
+        // ServerLevel.tick: entities outside entity-ticking chunks do not tick
+        // and do not check despawn (#16553).
+        if !(turns.ticking)(bx, bz) {
+            self.keep.push(true);
+            return;
+        }
         let nearest_player = turns
             .single_player
             .unwrap_or_else(|| turns.nearest.at(self.at(i), position));
-        // ServerLevel.tick: every loaded entity checks despawning, but
-        // only those in entity-ticking chunks (within the simulation
-        // distance) tick.
-        if !(turns.ticking)(bx, bz) {
-            turns.despawn.nearest_player = nearest_player;
-            self.rest(i, &turns.despawn);
-            return;
-        }
         let controlling = self.controlling(i);
         // A mod canceled its tick: it stays as it is.
         if (turns.canceled)(self.mobs[i].mob().id) {
@@ -286,18 +287,6 @@ impl<M: MobSlot> Group<M> {
     fn unloaded(&mut self, i: usize) {
         let m = self.mobs[i].mob();
         self.keep.push(!m.hostile() || m.persistent);
-    }
-
-    /// Mob `i`'s turn outside the entity-ticking area: only its despawn check, which reads the
-    /// nearest player and the difficulty, not the player the mob sees.
-    fn rest(&mut self, i: usize, despawn_w: &MobWorld) {
-        let m = self.mobs[i].mob_mut();
-        let kept = horizon_client::mobs::ai::despawn_check(m, despawn_w);
-        if !kept {
-            self.died.remove(&m.id);
-            self.snapshot[i].alive = false;
-        }
-        self.keep.push(kept);
     }
 
     /// Who controls mob `i`'s moves this tick: the velocity of the player riding it, when it is
@@ -356,6 +345,8 @@ impl<M: MobSlot> Group<M> {
             others_grid: Some(&self.grid),
             others_index: Some(&self.index),
             others_villagers: Some(&self.villager_slots),
+            village: Some(&self.village),
+            species_slots: Some(&self.species_slots),
             others_solid: Some(&self.solid_slots),
             difficulty,
             nearest_player,
@@ -368,9 +359,12 @@ impl<M: MobSlot> Group<M> {
         let sampled = super::super::tick_profile::start_mob(&self.mobs[i].mob().kind);
         // The level's stream is one for every lane: a turn that draws from it waits for the
         // turns before it. On its own stream it waits for none.
-        let mut own = self
-            .own_random
-            .then(|| horizon_client::parallel::mob_turn_random(self.mobs[i].mob().id, w.game_time));
+        let mut own = self.own_random.then(|| {
+            LevelRandom::for_level(horizon_client::parallel::mob_turn_random(
+                self.mobs[i].mob().id,
+                w.game_time,
+            ))
+        });
         let kept = horizon_client::mobs::riders::tick(
             &mut self.mobs,
             i,
@@ -488,7 +482,14 @@ impl<M: MobSlot> Group<M> {
         // ServerLevel ticks entities one after another: the ones
         // after this mob see it as it is now.
         let collisions = self.snapshot[i].collisions;
-        self.snapshot[i] = seen(m, shared.uuid);
+        let fresh = seen(m, shared.uuid);
+        self.village.mark(i, &self.snapshot[i], &fresh);
+        let reclassified = self.snapshot[i].species != fresh.species;
+        self.snapshot[i] = fresh;
+        if reclassified {
+            self.species_slots =
+                horizon_client::mobs::species_slots::SpeciesSlots::new(&self.snapshot);
+        }
         self.snapshot[i].collisions = collisions;
         self.snapshot[i].alive &= kept;
         // The server's collision cap (`mobs::max_collisions`): each mob `m` pushed in its turn
