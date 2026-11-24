@@ -36,6 +36,8 @@ HORIZON_CLIENT = [
     "crates/horizon-shader-api/packs/traced_shadows",
     # The registered slot-source test loads its pack and program.
     "tools/fixtures/registered_slot_sources",
+    # The hub's unit tests compile the anticheat's checks into the engine (lan/mod.rs `anticheat_hub`).
+    "crates/horizon-anticheat/src/hub.rs",
 ]
 # The generator scans these to write the mod API, the points and the host boundary: its own sources, the vocabulary, the
 # engine crates holding hook targets and their manifests.
