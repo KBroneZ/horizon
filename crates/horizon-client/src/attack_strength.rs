@@ -75,21 +75,22 @@ impl AttackStrength {
     }
 }
 
-/// `Player.attack`'s extra knockback: `getKnockback` (`weapon`, halved: the
+/// `Player.attack`'s extra knockback: `getKnockback` (`knockback`, halved: the
 /// ATTACK_KNOCKBACK value, plus on a server the weapon's knockback enchantment)
 /// and a sprinting full-strength hit (0.5), and whether the hit is that
 /// sprinting knockback attack.
-pub fn extra_knockback(weapon: f32, strength: f32, sprinting: bool) -> (f32, bool) {
+pub fn extra_knockback(knockback: f32, strength: f32, sprinting: bool) -> (f32, bool) {
     let knockback_attack = strength > 0.9 && sprinting;
     let bonus = if knockback_attack { 0.5 } else { 0.0 };
-    (weapon / 2.0 + bonus, knockback_attack)
+    (knockback / 2.0 + bonus, knockback_attack)
 }
 
 /// `causeExtraKnockback`'s cut of the attacker's horizontal speed.
 pub const ATTACKER_SLOWDOWN: f64 = 0.6;
 
 /// What the attacking client's own `Player.attack` does to itself on a hit
-/// at another player, whose `RemotePlayer.hurtClient` lets the hit through:
+/// at a target whose `Entity.hurtClient` override lets the hit through
+/// (`RemotePlayer`, boats, minecarts, End crystals and shulker bullets):
 /// whether `causeExtraKnockback` cuts its horizontal speed and stops its
 /// sprint. This runs on the client's player, not the server's: held items and
 /// effects only change attributes on a server and neither of these two is

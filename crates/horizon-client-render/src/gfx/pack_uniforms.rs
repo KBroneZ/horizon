@@ -266,6 +266,9 @@ pub const NAMES: &[&str] = &[
     "viewWidth",
     "viewHeight",
     "aspectRatio",
+    "screenSize",
+    "fsrScreenSize",
+    "fsrRenderScale",
     "near",
     "far",
     "rainStrength",
@@ -500,13 +503,18 @@ pub fn tilt_matrix(tilt: f32) -> Mat4 {
 
 /// The world direction of the shadow light (7.1): the sun by day, the moon by night.
 pub fn shadow_light(frame: &Frame, shadow: &Shadow) -> Vec3 {
+    body(light_angle(frame), shadow.sun_path_rotation).normalize()
+}
+
+/// The sky angle in degrees of the body that lights the frame: the sun by day, the moon by
+/// night.
+pub fn light_angle(frame: &Frame) -> f32 {
     let sun_angle = (frame.sky.sun_angle / 360.0 + 0.25).rem_euclid(1.0);
-    let angle = if sun_angle < 0.5 {
+    if sun_angle < 0.5 {
         frame.sky.sun_angle
     } else {
         frame.sky.moon_angle
-    };
-    body(angle, shadow.sun_path_rotation).normalize()
+    }
 }
 
 /// A sky angle in degrees as the fraction of a day Iris 1.11.7 gives packs (`sunAngle`,
@@ -514,6 +522,34 @@ pub fn shadow_light(frame: &Frame, shadow: &Shadow) -> Vec3 {
 /// / 360` in floats to the last bit, by day and by night.
 fn day_fraction(degrees: f32) -> f32 {
     (degrees + 90.0) % 360.0 / 360.0
+}
+
+/// The frame's [`WorldLook`](crate::render_slots::WorldLook) for `world_drawn`:
+/// `sun_path_rotation` is the shader pack's, a `shaders/` or a native one (`None`: no pack drew the frame).
+pub fn world_look(frame: &Frame, sun_path_rotation: Option<f32>) -> crate::render_slots::WorldLook {
+    let tilt = sun_path_rotation.unwrap_or(0.0);
+    let sky = &frame.sky;
+    let (fog_color, fog) = super::fog_uniform(frame);
+    let rgb1 = |c: [f32; 3]| [c[0], c[1], c[2], 1.0];
+    crate::render_slots::WorldLook {
+        sky_color: rgb1(sky.sky_color),
+        fog_color,
+        fog,
+        sun_direction: body(sky.sun_angle, tilt).normalize(),
+        moon_direction: body(sky.moon_angle, tilt).normalize(),
+        light_direction: body(light_angle(frame), tilt).normalize(),
+        sun_angle: day_fraction(sky.sun_angle),
+        sky_light_factor: sky.sky_light_factor,
+        sky_light_color: sky.sky_light_color,
+        ambient_light_color: sky.ambient_light_color,
+        block_light_tint: sky.block_light_tint,
+        sunrise_color: sky.sunrise_color,
+        star_brightness: sky.star_brightness,
+        underwater: frame.underwater,
+        water_fog_color: frame.water_fog,
+        night_vision: frame.night_vision,
+        shader_pack: sun_path_rotation.is_some(),
+    }
 }
 
 /// `shadowAngle`: the day fraction of the body that casts the shadows, the sun by day and the
@@ -951,6 +987,14 @@ impl FrameUniforms {
                 "viewWidth" => Value::f(&[size[0] as f32]),
                 "viewHeight" => Value::f(&[size[1] as f32]),
                 "aspectRatio" => Value::f(&[aspect]),
+                // The upscaler a pack runs needs its own view of the frame (#16757): the size
+                // it draws at (`screenSize`, `fsrScreenSize`) is the pack's render size, and
+                // the scale it renders at is 1 — Horizon already divides the world by the
+                // Upscaling ratio, so a pack's FSR pass needs to scale nothing itself. Like
+                // every other name in `NAMES`, these are built-ins: a `uniform.*` of the same
+                // name that a pack declares reads ours (`pack_post::index_in`).
+                "screenSize" | "fsrScreenSize" => Value::f(&[size[0] as f32, size[1] as f32]),
+                "fsrRenderScale" => Value::f(&[1.0]),
                 "near" => Value::f(&[0.05]),
                 // The chunk render distance, not the distant terrain's reach.
                 "far" => Value::f(&[frame.detail_distance]),
@@ -1135,7 +1179,7 @@ fn components(name: &str) -> usize {
         | "fogColor"
         | "skyColor"
         | "endFlashPosition" => 3,
-        "eyeBrightness" | "eyeBrightnessSmooth" | "atlasSize" => 2,
+        "eyeBrightness" | "eyeBrightnessSmooth" | "atlasSize" | "screenSize" | "fsrScreenSize" => 2,
         "entityColor" => 4,
         // Horizon's own vec4s, a dynamic light and half a boat's water patch box; their counts
         // are ints.
@@ -1339,7 +1383,11 @@ mod tests {
             format!(r#"{{"attributes": {attributes}}}"#),
         )
         .unwrap();
-        let environment = crate::environment::Environment::load_dimension(&root, name).unwrap();
+        let environment = crate::environment::Environment::load_dimension(
+            &horizon_assets::resource_source::ResourceSource::directory(root.clone()),
+            name,
+        )
+        .unwrap();
         std::fs::remove_dir_all(&root).unwrap();
         environment.sample(&crate::environment::Sample {
             day_time: 6000,
@@ -1469,7 +1517,7 @@ pub(super) mod initial_history_tests {
     /// 100-block offset; one it doesn't set is -100.05 (near) or 156 (far).
     #[test]
     fn the_shadow_projection_is_iris_s_for_the_pack_s_planes() {
-        let hud = HudBatch::new([1280, 720]);
+        let hud = HudBatch::scratch([1280, 720]);
         let f = frame(&hud);
         let (o, z, one) = (0, 0x80000000, 0x3f800000);
         type Case = (f32, Option<f32>, Option<f32>, [u32; 4], [u32; 4]);
@@ -1543,7 +1591,7 @@ pub(super) mod initial_history_tests {
     /// flying field of view (76.99999°) at 1280×720, the camera at (13.5, 69.62, -13.5).
     #[test]
     fn the_matrices_are_iris_to_the_last_bit() {
-        let hud = HudBatch::new([1280, 720]);
+        let hud = HudBatch::scratch([1280, 720]);
         let mut f = frame(&hud);
         f.camera = DVec3::new(13.5, 68.0 + f64::from(1.62f32), -13.5);
         f.yaw = 90.0;
@@ -1627,7 +1675,7 @@ pub(super) mod initial_history_tests {
     /// angles are vanilla's timeline at those ticks.
     #[test]
     fn the_sun_moon_and_up_are_iris_s_to_the_last_bit() {
-        let hud = HudBatch::new([1280, 720]);
+        let hud = HudBatch::scratch([1280, 720]);
         let mut f = frame(&hud);
         let o = 0;
         type Case = (f32, f32, f32, u32, u32, [[u32; 3]; 3], bool);
@@ -1724,7 +1772,7 @@ pub(super) mod initial_history_tests {
     /// negative x keeps its sign in the remainder.
     #[test]
     fn the_moon_s_shadow_matrices_are_iris_to_the_last_bit() {
-        let hud = HudBatch::new([1280, 720]);
+        let hud = HudBatch::scratch([1280, 720]);
         let mut f = frame(&hud);
         f.camera = DVec3::new(-556.5, 75.0 + f64::from(1.62f32), 212.5);
         f.sky.sun_angle = f32::from_bits(0x43107d5b);
@@ -1762,7 +1810,7 @@ pub(super) mod initial_history_tests {
     /// (13.5, 69.62, -13.5). The sky angles are vanilla's timeline at those ticks.
     #[test]
     fn the_shadow_matrices_turn_by_iris_s_angle_between_ticks() {
-        let hud = HudBatch::new([1280, 720]);
+        let hud = HudBatch::scratch([1280, 720]);
         let mut f = frame(&hud);
         f.camera = DVec3::new(13.5, 68.0 + f64::from(1.62f32), -13.5);
         let (o, z, one, minus) = (0, 0x80000000, 0x3f800000, 0xbf800000);
@@ -1838,7 +1886,7 @@ pub(super) mod initial_history_tests {
 
     #[test]
     fn first_history_is_current_then_tracks_the_actual_previous_frame() {
-        let hud = HudBatch::new([800, 450]);
+        let hud = HudBatch::scratch([800, 450]);
         let mut f = frame(&hud);
         let mut u = FrameUniforms::default();
         f.camera = DVec3::new(1024.25, -3.5, 11.75);
@@ -1877,7 +1925,7 @@ pub(super) mod initial_history_tests {
     /// clouds' drift at 0.03 blocks a tick, 5266 ticks in.
     #[test]
     fn cloud_time_is_how_far_the_clouds_drifted() {
-        let hud = HudBatch::new([800, 450]);
+        let hud = HudBatch::scratch([800, 450]);
         let f = frame(&hud);
         let mut u = FrameUniforms::default();
         let drift = crate::clouds::drift(5266, 0.0, 256);
@@ -1893,7 +1941,13 @@ pub(super) mod initial_history_tests {
 
     #[test]
     fn the_dynamic_lights_reach_the_pack_nearest_first() {
-        let hud = HudBatch::new([800, 450]);
+        let hud = HudBatch::new(
+            [800, 450],
+            crate::hud::GuiScale {
+                requested: 0,
+                unicode: false,
+            },
+        );
         let mut f = frame(&hud);
         let lights = [[1.0, 2.0, 3.0, 14.0], [-4.0, 0.5, 6.0, 7.0]];
         f.dynamic_lights = &lights;
@@ -1947,7 +2001,7 @@ pub(super) mod initial_history_tests {
 
     #[test]
     fn environmental_smoothing_starts_at_the_first_inputs_without_resetting_each_frame() {
-        let hud = HudBatch::new([800, 450]);
+        let hud = HudBatch::scratch([800, 450]);
         let f = frame(&hud);
         let mut u = FrameUniforms::default();
         let mut input = PackInputs {
@@ -1972,12 +2026,13 @@ pub(super) mod initial_history_tests {
     #[test]
     #[ignore = "requires a host GPU; run with --ignored --nocapture"]
     fn core_matrix_inputs_render_provider_values() {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let _gpu = crate::gfx::test_gpu::lock();
+        let instance = crate::gfx::test_gpu::instance();
         let adapter = pollster::block_on(instance.request_adapter(&Default::default())).unwrap();
         eprintln!("Core matrix GPU: {:?}", adapter.get_info());
         let (device, queue) =
             pollster::block_on(adapter.request_device(&Default::default())).unwrap();
-        let hud = HudBatch::new([800, 400]);
+        let hud = HudBatch::scratch([800, 400]);
         let mut f = frame(&hud);
         f.camera = DVec3::new(1024.25, 100.5, -2048.75);
         f.yaw = 180.0;
@@ -2047,14 +2102,15 @@ pub(super) mod initial_history_tests {
     /// `normalMatrix` in a core-profile gbuffers program is the view's rotation; in the
     /// compatibility profile it stays zero (the issue's Iris 1.11.7 probes, #9136).
     #[test]
-    #[ignore = "requires a host GPU; run with --ignored --nocapture"]
+    #[ignore = "daily"]
     fn core_normal_matrix_renders_the_view_rotation() {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let _gpu = crate::gfx::test_gpu::lock();
+        let instance = crate::gfx::test_gpu::instance();
         let adapter = pollster::block_on(instance.request_adapter(&Default::default())).unwrap();
         eprintln!("Normal matrix GPU: {:?}", adapter.get_info());
         let (device, queue) =
             pollster::block_on(adapter.request_device(&Default::default())).unwrap();
-        let hud = HudBatch::new([800, 400]);
+        let hud = HudBatch::scratch([800, 400]);
         let mut f = frame(&hud);
         // Facing west (-X), level: view space looks down -Z with +X to the right (north).
         f.yaw = 90.0;
@@ -2248,13 +2304,32 @@ pub(super) mod initial_history_tests {
         }
     }
 
+    /// The upscaler's uniforms (#16757): a window 1280×720 at Performance upscaling (ratio 2)
+    /// leaves the world 640×360, and a pack that reads it is given that size to draw at
+    /// (`screenSize`, `fsrScreenSize`), with `fsrRenderScale` 1 — the world is already
+    /// scaled, so the pack's own FSR pass scales nothing.
+    #[test]
+    fn the_upscaler_s_uniforms_tell_the_pack_the_size_it_draws_at() {
+        let hud = HudBatch::scratch([1280, 720]);
+        let mut u = FrameUniforms::default();
+        u.update(&frame(&hud), &PackInputs::default(), [640, 360]);
+        assert_eq!(float(&u, "screenSize")[..2], [640.0, 360.0]);
+        assert_eq!(float(&u, "fsrScreenSize")[..2], [640.0, 360.0]);
+        assert_eq!(float(&u, "fsrRenderScale")[0], 1.0);
+        // A custom uniform checks their shapes before the first frame, at their sizes (#9086).
+        let shape = |name| zero(name).map(|v| v.n);
+        assert_eq!(shape("screenSize"), Some(2));
+        assert_eq!(shape("fsrScreenSize"), Some(2));
+        assert_eq!(shape("fsrRenderScale"), Some(1));
+    }
+
     /// Iris 1.11.7, read back exactly with a probe pack on a clear day (render distance 12,
     /// cloud range 64): fogStart 0 and fogEnd 1024 (the environmental fog, not the render
     /// distance's 172.8 to 192), fogDensity 0; composite and final programs read alphaTestRef
     /// 0.1, blockEntityId -1, fogMode 0 and fogShape -1.
     #[test]
     fn fog_and_draw_uniforms_outside_a_draw_follow_iris() {
-        let hud = HudBatch::new([800, 450]);
+        let hud = HudBatch::scratch([800, 450]);
         let mut f = frame(&hud);
         f.fog = Some(crate::fog::FogData {
             color: [0.7, 0.8, 1.0, 1.0],
@@ -2282,7 +2357,7 @@ pub(super) mod initial_history_tests {
     /// and end, a scale of 1 / (end - start), and a density of 0, not 1.
     #[test]
     fn the_compatibility_gl_fog_has_no_density() {
-        let hud = HudBatch::new([800, 450]);
+        let hud = HudBatch::scratch([800, 450]);
         let mut f = frame(&hud);
         f.fog = Some(crate::fog::FogData {
             color: [0.09, 0.24, 0.23, 1.0],
@@ -2304,7 +2379,7 @@ pub(super) mod initial_history_tests {
     /// (cylinder) where composite and final programs read 0 and -1.
     #[test]
     fn programs_that_draw_geometry_read_their_own_fog_and_centre_depth() {
-        let hud = HudBatch::new([800, 450]);
+        let hud = HudBatch::scratch([800, 450]);
         let mut u = FrameUniforms::default();
         u.update(&frame(&hud), &PackInputs::default(), [800, 450]);
         let at = |name, geometry| index_in(name, geometry).unwrap();
@@ -2327,7 +2402,7 @@ pub(super) mod initial_history_tests {
     /// centre depth 0.1 s.
     #[test]
     fn smoothed_uniforms_take_iris_half_lives() {
-        let hud = HudBatch::new([800, 450]);
+        let hud = HudBatch::scratch([800, 450]);
         let f = frame(&hud);
         let mut u = FrameUniforms::default();
         // A scripted clock: the next frame comes exactly `seconds` after the last, however long
@@ -2377,7 +2452,13 @@ pub(super) mod initial_history_tests {
     /// wetness reaches half the rain in 3 s instead of 60 s.
     #[test]
     fn a_pack_s_half_lives_replace_the_defaults() {
-        let hud = HudBatch::new([800, 450]);
+        let hud = HudBatch::new(
+            [800, 450],
+            crate::hud::GuiScale {
+                requested: 0,
+                unicode: false,
+            },
+        );
         let f = frame(&hud);
         let mut u = FrameUniforms {
             half_lives: [Some(30.0), Some(10.0), None, None],
@@ -2412,7 +2493,7 @@ pub(super) mod initial_history_tests {
     /// the frame is drawn, and smoothed values are at their targets.
     #[test]
     fn a_still_frame_takes_the_world_ticks_as_its_clock() {
-        let hud = HudBatch::new([800, 450]);
+        let hud = HudBatch::scratch([800, 450]);
         let f = frame(&hud);
         let mut u = FrameUniforms::default();
         let mut input = PackInputs {
@@ -2447,7 +2528,7 @@ pub(super) mod initial_history_tests {
     /// A scripted clock's values reach the pack as they are, before STILL's ticks.
     #[test]
     fn a_scripted_clock_comes_before_the_still_ticks() {
-        let hud = HudBatch::new([800, 450]);
+        let hud = HudBatch::scratch([800, 450]);
         let f = frame(&hud);
         for still_ticks in [None, Some(47_811)] {
             let mut u = FrameUniforms::default();
@@ -2481,7 +2562,7 @@ pub(super) mod initial_history_tests {
     /// otherwise put them at their targets.
     #[test]
     fn a_scripted_clock_moves_smoothed_values_by_its_delta() {
-        let hud = HudBatch::new([800, 450]);
+        let hud = HudBatch::scratch([800, 450]);
         let f = frame(&hud);
         let mut u = FrameUniforms::default();
         let mut input = PackInputs {
@@ -2524,7 +2605,7 @@ pub(super) mod initial_history_tests {
             &horizon_shaders::Macros::standard(),
         );
         let mut custom = horizon_shaders::Custom::parse(&properties);
-        let hud = HudBatch::new([800, 450]);
+        let hud = HudBatch::scratch([800, 450]);
         let f = frame(&hud);
         let mut u = FrameUniforms::default();
         let mut run = |u: &mut FrameUniforms| -> Vec<[u32; 2]> {
@@ -2587,7 +2668,13 @@ pub(super) mod initial_history_tests {
     /// at their targets, the clock from 0; the atlas size it was given stays.
     #[test]
     fn a_reset_forgets_the_uniforms_history_and_keeps_the_pack_s_settings() {
-        let hud = HudBatch::new([16, 16]);
+        let hud = HudBatch::new(
+            [16, 16],
+            crate::hud::GuiScale {
+                requested: 0,
+                unicode: false,
+            },
+        );
         let mut f = frame(&hud);
         let mut uniforms = FrameUniforms {
             atlas: [256, 128],
@@ -2642,7 +2729,7 @@ pub(super) mod initial_history_tests {
     /// 0.25 in the End), and `playerMood` and `constantMood` both the cave mood.
     #[test]
     fn ambient_light_and_mood_come_from_the_inputs() {
-        let hud = HudBatch::new([800, 450]);
+        let hud = HudBatch::scratch([800, 450]);
         let mut u = FrameUniforms::default();
         let input = PackInputs {
             ambient_light: 0.25,
@@ -2653,6 +2740,35 @@ pub(super) mod initial_history_tests {
         assert_eq!(float(&u, "ambientLight")[0], 0.25);
         assert_eq!(float(&u, "playerMood")[0], 0.0235);
         assert_eq!(float(&u, "constantMood")[0], 0.0235);
+    }
+
+    #[test]
+    fn world_look_gives_the_frames_sun_fog_and_water() {
+        let hud = HudBatch::scratch([1280, 720]);
+        let mut f = frame(&hud);
+        f.sky.sun_angle = 0.0;
+        f.sky.moon_angle = 180.0;
+        f.underwater = true;
+        f.water_fog = [0.1, 0.2, 0.6];
+        let look = world_look(&f, None);
+        // Noon: the sun straight up, the moon straight down, the sun lights the frame.
+        assert!(
+            look.sun_direction.abs_diff_eq(Vec3::Y, 1e-5),
+            "{:?}",
+            look.sun_direction
+        );
+        assert!(look.moon_direction.abs_diff_eq(-Vec3::Y, 1e-5));
+        assert_eq!(look.light_direction, look.sun_direction);
+        assert_eq!(look.sun_angle, 0.25);
+        let (color, fog) = super::super::fog_uniform(&f);
+        assert_eq!((look.fog_color, look.fog), (color, fog));
+        assert!(look.underwater && !look.shader_pack);
+        assert_eq!(look.water_fog_color, [0.1, 0.2, 0.6]);
+        // A pack's sunPathRotation turns the noon sun toward -Z (north), and says a pack drew.
+        let tilted = world_look(&f, Some(30.0));
+        assert!(tilted.shader_pack);
+        assert!(tilted.sun_direction.z < -0.4 && tilted.sun_direction.y > 0.8);
+        assert!((tilted.sun_direction.length() - 1.0).abs() < 1e-5);
     }
 
     pub(in crate::gfx) fn frame(hud: &HudBatch) -> Frame<'_> {
@@ -2678,6 +2794,7 @@ pub(super) mod initial_history_tests {
             underwater: false,
             cave_culling: false,
             title: true,
+            gui_only: false,
             sky_blocked: false,
             skybox: false,
             end_sky: false,
