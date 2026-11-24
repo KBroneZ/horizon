@@ -2536,6 +2536,7 @@ dependencies = [
  "horizon-official-servers",
  "horizon-perf-share",
  "horizon-platform",
+ "horizon-theme",
  "log",
  "winresource",
 ]
